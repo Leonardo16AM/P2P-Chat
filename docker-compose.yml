@@ -14,6 +14,8 @@ services:
     networks:
       chat_network:
         ipv4_address: 192.168.1.2
+    stdin_open: true  
+    tty: true         
 
   client1:
     image: client-image
@@ -21,6 +23,8 @@ services:
     networks:
       chat_network:
         ipv4_address: 192.168.1.3
+    stdin_open: true  
+    tty: true         
 
   client2:
     image: client-image
@@ -28,6 +32,8 @@ services:
     networks:
       chat_network:
         ipv4_address: 192.168.1.4
+    stdin_open: true  
+    tty: true         
 
   client3:
     image: client-image
@@ -35,3 +41,5 @@ services:
     networks:
       chat_network:
         ipv4_address: 192.168.1.5
+    stdin_open: true  
+    tty: true         

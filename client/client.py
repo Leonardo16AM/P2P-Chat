@@ -7,12 +7,45 @@ from getpass import getpass
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.backends import default_backend
+import logging
+from termcolor import colored as col
+
+
+BROADCAST_PORT = 55555  # Puerto para el broadcast
+BUFFER_SIZE = 1024      # Tamaño del buffer para recibir mensajes
+
+logging.basicConfig(filename='client.log', level=logging.INFO, 
+                    format='%(asctime)s - %(levelname)s - %(message)s')
+
+ 
+def find_gestor():
+    """Descubre la dirección IP del gestor mediante broadcast."""
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP) as s:
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)  # Activar modo broadcast
+        s.settimeout(5)  # Tiempo de espera por respuesta
+
+        broadcast_message = b"DISCOVER_GESTOR"
+        gestor_ip = None
+
+        try:
+            logging.info("Enviando broadcast para descubrir gestor...")
+            s.sendto(broadcast_message, ('<broadcast>', BROADCAST_PORT))
+
+            # Esperar respuesta
+            data, addr = s.recvfrom(BUFFER_SIZE)
+            gestor_ip = data.decode()
+            logging.info(f"Gestor descubierto en {gestor_ip} (desde {addr})")
+        except socket.timeout:
+            logging.warning("No se recibió respuesta del gestor.")
+        except Exception as e:
+            logging.error(f"Error al buscar el gestor: {e}")
+        return gestor_ip
 
 
 # Configuración
-GESTOR_HOST = '127.0.0.1'  # Cambiar por gestor locator
+GESTOR_HOST = '127.0.0.1' 
 GESTOR_PORT = 65432
-ALIVE_INTERVAL = 10  # Intervalo en segundos para enviar señales de vida
+ALIVE_INTERVAL = 10  
 
 # Rutas de almacenamiento de llaves
 PRIVATE_KEY_FILE = 'private_key.pem'
@@ -135,14 +168,16 @@ def query_user_info(username, target_username):
 
 #region main
 def main():
+    GESTOR_HOST=find_gestor()
+    print(col(f"Found gestor at: {GESTOR_HOST}",'green'))
+
     private_key, public_key = load_or_generate_keys()
-    # Convertir llave pública a string
     public_key_str = public_key.public_bytes(
         encoding=serialization.Encoding.PEM,
         format=serialization.PublicFormat.SubjectPublicKeyInfo
     ).decode()
 
-    print("Bienvenido al Cliente de Chat P2P")
+    print(col("Bienvenido al Cliente de Chat P2P",'blue'))
     while True:
         print("\nSelecciona una opción:")
         print("1. Registrarse")

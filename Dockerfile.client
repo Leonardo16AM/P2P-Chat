@@ -7,8 +7,9 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-COPY ./server /app
+COPY ./client /app
 
 RUN pip install --no-cache-dir -r requirements.txt
 
-CMD ["python3", "main.py"]
+# CMD ["python3", "client.py"]
+CMD ["tail", "-f", "/dev/null"]

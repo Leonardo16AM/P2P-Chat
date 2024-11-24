@@ -10,3 +10,7 @@ On linux:
 
 On windows:
  > ./startup.bat
+
+To attach terminal:
+
+ > docker exec -it client1 bash
