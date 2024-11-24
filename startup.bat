@@ -26,11 +26,11 @@ if %ERRORLEVEL% neq 0 (
     exit /b 1
 )
 
-echo Creando la red de Docker...
-docker network create --subnet=192.168.1.0/24 chat_network
-if %ERRORLEVEL% neq 0 (
-    echo Error al crear la red de Docker. Es posible que ya exista.
-)
+@REM echo Creando la red de Docker...
+@REM docker network create --subnet=192.168.1.0/24 chat_network
+@REM if %ERRORLEVEL% neq 0 (
+@REM     echo Error al crear la red de Docker. Es posible que ya exista.
+@REM )
 
 echo Levantando los contenedores con Docker Compose...
 docker-compose up -d

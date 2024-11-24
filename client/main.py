@@ -1,8 +1,13 @@
 import socket
 import time
+import threading
+import logging
 
 BROADCAST_PORT = 55555  # Puerto para el broadcast
 BUFFER_SIZE = 1024      # Tamaño del buffer para recibir mensajes
+
+logging.basicConfig(filename='client.log', level=logging.INFO, 
+                    format='%(asctime)s - %(levelname)s - %(message)s')
 
 def get_ip():
     """Obtiene la dirección IP local."""
@@ -23,27 +28,28 @@ def find_gestor():
         gestor_ip = None
 
         try:
-            print("Enviando broadcast para descubrir gestor...")
+            logging.info("Enviando broadcast para descubrir gestor...")
             s.sendto(broadcast_message, ('<broadcast>', BROADCAST_PORT))
 
             # Esperar respuesta
             data, addr = s.recvfrom(BUFFER_SIZE)
             gestor_ip = data.decode()
-            print(f"Gestor descubierto en {gestor_ip} (desde {addr})")
+            logging.info(f"Gestor descubierto en {gestor_ip} (desde {addr})")
         except socket.timeout:
-            print("No se recibió respuesta del gestor.")
+            logging.warning("No se recibió respuesta del gestor.")
         except Exception as e:
-            print(f"Error al buscar el gestor: {e}")
+            logging.error(f"Error al buscar el gestor: {e}")
         return gestor_ip
 
 
 if __name__ == "__main__":
-    gestor_ip = find_gestor()
-    if gestor_ip:
-        print(f"Gestor encontrado en {gestor_ip}")
-    else:
-        print("No se pudo encontrar el gestor.")
     while True:
+        gestor_ip = find_gestor()
+        if gestor_ip:
+            logging.info(f"Gestor encontrado en {gestor_ip}")
+        else:
+            logging.warning("No se pudo encontrar el gestor.")
+        
         ip = get_ip()
-        print(f"Mi IP en la red Docker es: {ip}")
+        logging.info(f"Mi IP en la red Docker es: {ip}")
         time.sleep(60)

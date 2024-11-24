@@ -25,11 +25,11 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-echo "Creando la red de Docker..."
-docker network create --subnet=192.168.1.0/24 chat_network
-if [ $? -ne 0 ]; then
-    echo "Error al crear la red de Docker. Es posible que ya exista."
-fi
+# echo "Creando la red de Docker..."
+# docker network create --subnet=192.168.1.0/24 chat_network
+# if [ $? -ne 0 ]; then
+#     echo "Error al crear la red de Docker. Es posible que ya exista."
+# fi
 
 echo "Levantando los contenedores con Docker Compose..."
 docker-compose up -d
