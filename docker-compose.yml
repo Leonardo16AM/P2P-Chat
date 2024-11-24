@@ -1,0 +1,37 @@
+version: '3.8'
+
+networks:
+  chat_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 192.168.1.0/24
+
+services:
+  server:
+    image: server-image
+    container_name: server
+    networks:
+      chat_network:
+        ipv4_address: 192.168.1.2
+
+  client1:
+    image: client-image
+    container_name: client1
+    networks:
+      chat_network:
+        ipv4_address: 192.168.1.3
+
+  client2:
+    image: client-image
+    container_name: client2
+    networks:
+      chat_network:
+        ipv4_address: 192.168.1.4
+
+  client3:
+    image: client-image
+    container_name: client3
+    networks:
+      chat_network:
+        ipv4_address: 192.168.1.5
