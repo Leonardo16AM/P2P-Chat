@@ -13,4 +13,4 @@ COPY ./server /app
 
 RUN pip install --no-cache-dir -r requirements.txt
 
-CMD ["sh", "-c", "python3 locator.py & python3 gestor.py"]
+CMD ["sh", "-c", "python3 locator.py & python3 gestor.py & wait"]

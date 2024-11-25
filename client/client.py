@@ -43,7 +43,7 @@ def find_gestor():
 
 
 # Configuración
-GESTOR_HOST = '127.0.0.1' 
+GESTOR_HOST = '192.168.1.2' 
 GESTOR_PORT = 65432
 ALIVE_INTERVAL = 10  
 
@@ -131,6 +131,7 @@ def login(username, password):
 
 #region alive
 def send_alive_signal(username, public_key_str):
+    global GESTOR_HOST 
     while True:
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -147,7 +148,17 @@ def send_alive_signal(username, public_key_str):
                     print(f"Error en señal de vida: {response.get('message')}")
         except Exception as e:
             print(f"Error al enviar señal de vida: {str(e)}")
+            while True:
+                gestor_ip = find_gestor()
+                if gestor_ip:
+                    GESTOR_HOST = gestor_ip  
+                    print(col(f"Nuevo gestor encontrado: {GESTOR_HOST}", 'green'))
+                    break  
+                else:
+                    print("Gestor no encontrado. Reintentando en 5 segundos...")
+                    time.sleep(5)  
         time.sleep(ALIVE_INTERVAL)
+
 
 #region user_query
 def query_user_info(username, target_username):

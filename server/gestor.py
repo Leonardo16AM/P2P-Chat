@@ -22,7 +22,8 @@ def init_db():
             password BLOB NOT NULL,
             ip TEXT NOT NULL,
             public_key TEXT NOT NULL,
-            last_seen TIMESTAMP NOT NULL
+            last_seen TIMESTAMP NOT NULL,
+            status TEXT NOT NULL DEFAULT 'disconnected'
         )
     ''')
     conn.commit()
@@ -77,8 +78,8 @@ def register_user(message):
     try:
         conn = sqlite3.connect('chat_manager.db')
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO users (username, password, ip, public_key, last_seen) VALUES (?, ?, ?, ?, ?)",
-                       (username, hashed, "", public_key, datetime.now()))
+        cursor.execute("INSERT INTO users (username, password, ip, public_key, last_seen, status) VALUES (?, ?, ?, ?, ?, ?)",
+                       (username, hashed, "", public_key, datetime.now(), "disconnected"))
         conn.commit()
         conn.close()
         log_message(f"Usuario {username} registrado exitosamente.")
@@ -104,8 +105,8 @@ def login_user(message, addr):
         cursor.execute("SELECT password FROM users WHERE username = ?", (username,))
         row = cursor.fetchone()
         if row and bcrypt.checkpw(password.encode(), row[0]):
-            cursor.execute("UPDATE users SET ip = ?, last_seen = ? WHERE username = ?",
-                           (addr[0], datetime.now(), username))
+            cursor.execute("UPDATE users SET ip = ?, last_seen = ?, status = ? WHERE username = ?",
+                           (addr[0], datetime.now(), "connected", username))
             conn.commit()
             conn.close()
             log_message(f"Usuario {username} autenticado exitosamente desde {addr[0]}.")
@@ -131,8 +132,8 @@ def alive_signal(message, addr):
         cursor = conn.cursor()
         cursor.execute("SELECT username FROM users WHERE username = ?", (username,))
         if cursor.fetchone():
-            cursor.execute("UPDATE users SET ip = ?, public_key = ?, last_seen = ? WHERE username = ?",
-                           (addr[0], public_key, datetime.now(), username))
+            cursor.execute("UPDATE users SET ip = ?, public_key = ?, last_seen = ?, status = ? WHERE username = ?",
+                           (addr[0], public_key, datetime.now(), "connected", username))
             conn.commit()
             conn.close()
             log_message(f"Señal de vida actualizada para {username} desde {addr[0]}.")
@@ -156,11 +157,11 @@ def get_user_info(message):
     try:
         conn = sqlite3.connect('chat_manager.db')
         cursor = conn.cursor()
-        cursor.execute("SELECT ip, public_key, last_seen FROM users WHERE username = ?", (target,))
+        cursor.execute("SELECT ip, public_key, last_seen, status FROM users WHERE username = ?", (target,))
         row = cursor.fetchone()
         if row:
-            ip, public_key, last_seen = row
-            if datetime.now() - datetime.fromisoformat(last_seen) > timedelta(seconds=TIMEOUT):
+            ip, public_key, last_seen, status = row
+            if status != "connected":
                 conn.close()
                 log_message(f"Error: El usuario {target} está desconectado.")
                 return {"status": "error", "message": "El usuario está desconectado."}
@@ -182,12 +183,12 @@ def cleanup_users():
             conn = sqlite3.connect('chat_manager.db')
             cursor = conn.cursor()
             cutoff = datetime.now() - timedelta(seconds=TIMEOUT)
-            cursor.execute("DELETE FROM users WHERE last_seen < ?", (cutoff,))
-            deleted = cursor.rowcount
+            cursor.execute("UPDATE users SET status = 'disconnected' WHERE last_seen < ?", (cutoff,))
+            updated = cursor.rowcount
             conn.commit()
             conn.close()
-            if deleted > 0:
-                log_message(f"{deleted} usuarios desconectados eliminados por inactividad.")
+            if updated > 0:
+                log_message(f"{updated} usuarios actualizados a estado 'disconnected' por inactividad.")
             time.sleep(ALIVE_INTERVAL)
         except Exception as e:
             log_message(f"Error en limpieza de usuarios: {str(e)}")
