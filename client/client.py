@@ -539,9 +539,9 @@ def main():
         else:
             print("Opción no válida. Intenta nuevamente.")
 
-# if __name__ == "__main__":
-#     initialize_database()
-#     main()
+if __name__ == "__main__":
+    initialize_database()
+    main()
 
 
 
@@ -550,9 +550,9 @@ def main():
 
 
 
-# Prueba de la base de datos
-initialize_database()
-save_message("user1", "user2", "Hola, ¿cómo estás?")
-messages = get_pending_messages("user2")
-print("Mensajes pendientes:", messages)
-mark_messages_as_delivered([msg[0] for msg in messages])
+# # Prueba de la base de datos
+# initialize_database()
+# save_message("user1", "user2", "Hola, ¿cómo estás?")
+# messages = get_pending_messages("user2")
+# print("Mensajes pendientes:", messages)
+# mark_messages_as_delivered([msg[0] for msg in messages])
