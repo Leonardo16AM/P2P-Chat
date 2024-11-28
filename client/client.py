@@ -9,10 +9,14 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.backends import default_backend
 import logging
 from termcolor import colored as col
+import sqlite3
 
 
 BROADCAST_PORT = 55555  # Puerto para el broadcast
 BUFFER_SIZE = 1024      # Tamaño del buffer para recibir mensajes
+DB_FILE = "client_data.db"  # Nombre del archivo de la base de datos
+CLIENT_PORT = 12345
+
 
 logging.basicConfig(filename='client.log', level=logging.INFO, 
                     format='%(asctime)s - %(levelname)s - %(message)s')
@@ -176,6 +180,278 @@ def query_user_info(username, target_username):
             return response
     except Exception as e:
         return {"status": "error", "message": f"Error de conexión: {str(e)}"}
+    
+# region database
+    
+def initialize_database():
+    """Crea la base de datos SQLite y las tablas necesarias."""
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+
+    # Tabla para almacenar usuarios
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            public_key TEXT NOT NULL
+        );
+    ''')    
+    
+    # Tabla para almacenar mensajes
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        chat_id INTEGER NOT NULL,     -- Relación con el chat
+        sender TEXT NOT NULL,         -- Quién envió el mensaje (yo o el usuario remoto)
+        message TEXT NOT NULL,        -- Contenido del mensaje
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+        delivered INTEGER DEFAULT 0,  -- 0 = No entregado, 1 = Entregado
+        FOREIGN KEY(chat_id) REFERENCES chats(id) ON DELETE CASCADE
+    );
+    ''')
+    
+    # Tabla para almacenar historial de chats (si es necesario)
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS chats (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT NOT NULL,       -- Usuario remoto
+        last_message TEXT,            -- Último mensaje del chat
+        last_timestamp DATETIME,      -- Timestamp del último mensaje
+        UNIQUE(username)              -- Un chat por usuario
+    );
+    ''')
+    
+    conn.commit()
+    conn.close()
+    print("Base de datos inicializada correctamente.")
+
+# region chat
+
+# def save_message(sender, receiver, message, delivered=False):
+#     """Guarda un mensaje en la base de datos."""
+#     conn = sqlite3.connect(DB_FILE)
+#     cursor = conn.cursor()
+#     cursor.execute('''
+#         INSERT INTO messages (sender, receiver, message, delivered)
+#         VALUES (?, ?, ?, ?)
+#     ''', (sender, receiver, message, 1 if delivered else 0))
+#     conn.commit()
+#     conn.close()
+
+def save_message(chat_id, sender, message, delivered=False):
+    """Guarda un mensaje en la base de datos."""
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    
+    # Insertar el mensaje
+    cursor.execute('''
+        INSERT INTO messages (chat_id, sender, message, delivered)
+        VALUES (?, ?, ?, ?)
+    ''', (chat_id, sender, message, 1 if delivered else 0))
+    
+    # Actualizar el último mensaje del chat
+    cursor.execute('''
+        UPDATE chats
+        SET last_message = ?, last_timestamp = CURRENT_TIMESTAMP
+        WHERE id = ?
+    ''', (message, chat_id))
+    
+    conn.commit()
+    conn.close()
+    
+def get_chat_messages(chat_id):
+    """Obtiene los mensajes de un chat."""
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT sender, message, timestamp
+        FROM messages
+        WHERE chat_id = ?
+        ORDER BY timestamp ASC
+    ''', (chat_id,))
+    messages = cursor.fetchall()
+    conn.close()
+    return messages
+
+def list_chats():
+    """Lista todos los chats activos."""
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT id, username, last_message, last_timestamp
+        FROM chats
+        ORDER BY last_timestamp DESC
+    ''')
+    chats = cursor.fetchall()
+    conn.close()
+    return chats
+
+def show_chats():
+    """Muestra una lista de los chats activos."""
+    chats = list_chats()
+    if not chats:
+        print(col("No tienes chats activos.", 'yellow'))
+        return
+    
+    print(col("Chats activos:", 'blue'))
+    for chat in chats:
+        chat_id, username, last_message, last_timestamp = chat
+        print(f"{chat_id}: {username} - Último mensaje: '{last_message}' a las {last_timestamp}")
+
+
+def get_pending_messages(chat_id):
+    """Obtiene mensajes no entregados para un chat específico."""
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT id, sender, message, timestamp FROM messages
+        WHERE chat_id = ? AND delivered = 0
+    ''', (chat_id,))
+    messages = cursor.fetchall()
+    conn.close()
+    return messages
+
+def review_pending_messages():
+    """Revisa los mensajes pendientes almacenados localmente para todos los chats."""
+    chats = list_chats()
+    if not chats:
+        print(col("No tienes mensajes pendientes.", 'green'))
+        return
+    
+    print(col("Revisando mensajes pendientes...", 'blue'))
+    for chat in chats:
+        chat_id, username, last_message, last_timestamp = chat
+        pending_messages = get_pending_messages(chat_id)
+        if not pending_messages:
+            continue
+        
+        print(col(f"\nChat con {username}:", 'cyan'))
+        for msg in pending_messages:
+            print(f"[Pendiente] {col(msg[1], 'cyan')}: {msg[2]} (enviado el {msg[3]})")
+        
+        # Marcar como entregados
+        message_ids = [msg[0] for msg in pending_messages]
+        mark_messages_as_delivered(message_ids)
+
+
+
+
+def get_or_create_chat(username):
+    """Obtiene o crea un chat con un usuario."""
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    
+    # Buscar el chat existente
+    cursor.execute('''
+        SELECT id FROM chats WHERE username = ?
+    ''', (username,))
+    chat = cursor.fetchone()
+    
+    # Si no existe, crear uno
+    if chat is None:
+        cursor.execute('''
+            INSERT INTO chats (username, last_message, last_timestamp)
+            VALUES (?, ?, ?)
+        ''', (username, None, None))
+        conn.commit()
+        chat_id = cursor.lastrowid
+    else:
+        chat_id = chat[0]
+    
+    conn.close()
+    return chat_id
+
+def open_chat():
+    """Permite al usuario abrir un chat y ver los mensajes."""
+    chat_id = input("ID del chat a abrir: ")
+    try:
+        chat_id = int(chat_id)
+        messages = get_chat_messages(chat_id)
+        if not messages:
+            print(col("No hay mensajes en este chat.", 'yellow'))
+            return
+        
+        print(col("Mensajes:", 'blue'))
+        for sender, message, timestamp in messages:
+            print(f"[{timestamp}] {col(sender, 'cyan')}: {message}")
+    except ValueError:
+        print(col("ID del chat no válido.", 'red'))
+
+
+
+
+def mark_messages_as_delivered(message_ids):
+    """Marca mensajes como entregados en la base de datos."""
+    if not message_ids:
+        print("No hay mensajes pendientes para marcar como entregados.")
+        return
+
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute('''
+        UPDATE messages
+        SET delivered = 1
+        WHERE id IN ({})
+    '''.format(','.join('?' for _ in message_ids)), message_ids)
+    conn.commit()
+    conn.close()
+    print(f"Mensajes marcados como entregados: {message_ids}")
+
+
+def send_message(username):
+    """Envía un mensaje a otro usuario."""
+    target_username = input("Usuario destino: ")
+    message_content = input("Mensaje: ")
+
+    # Obtener o crear el chat
+    chat_id = get_or_create_chat(target_username)
+    
+    # Consultar al gestor para obtener la IP del destinatario
+    response = query_user_info(username, target_username)
+    if response.get("status") == "success":
+        target_ip = response.get("ip")
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
+                client_socket.connect((target_ip, CLIENT_PORT))
+                message = {
+                    "sender": username,
+                    "content": message_content,
+                }
+                client_socket.sendall(json.dumps(message).encode())
+                print(col("Mensaje enviado con éxito.", 'green'))
+                save_message(chat_id, username, message_content, delivered=True)
+        except Exception as e:
+            print(col(f"Error al enviar el mensaje: {str(e)}", 'red'))
+            save_message(chat_id, username, message_content, delivered=False)
+    else:
+        print(col(f"Error al obtener información del usuario: {response.get('message')}", 'red'))
+
+
+
+def start_message_listener(username):
+    def listen():
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
+            server_socket.bind(('', CLIENT_PORT))
+            server_socket.listen(5)  # Escuchar hasta 5 conexiones simultáneas
+            print(col(f"[{username}] Escuchando mensajes en el puerto {CLIENT_PORT}...", 'green'))
+            
+            while True:
+                conn, addr = server_socket.accept()
+                with conn:
+                    try:
+                        message = conn.recv(BUFFER_SIZE).decode()
+                        print(col(f"Nuevo mensaje de {addr[0]}: {message}", 'cyan'))
+                        
+                        # Aquí puedes guardar el mensaje en la base de datos SQLite
+                        save_message(sender=addr[0], receiver=username, message=message, delivered=True)
+                    except Exception as e:
+                        print(col(f"Error al procesar mensaje: {str(e)}", 'red'))
+
+    # Ejecutar el servidor en un hilo separado
+    listener_thread = threading.Thread(target=listen, daemon=True)
+    listener_thread.start()
+
+
 
 #region main
 def main():
@@ -213,17 +489,29 @@ def main():
             response = login(username, password)
             print(response.get("message"))
             if response.get("status") == "success":
+                # Revisar mensajes pendientes
+                review_pending_messages(username)
+                # Iniciar hilo para escuchar mensajes
+                start_message_listener(username)
+
                 # Iniciar hilo de señales de vida
                 alive_thread = threading.Thread(target=send_alive_signal, args=(username, public_key_str), daemon=True)
                 alive_thread.start()
                 print("Señales de vida enviándose en segundo plano.")
+
+
                 # Iniciar interfaz de consultas
                 while True:
                     print("\nOpciones disponibles:")
                     print("1. Consultar usuario")
-                    print("2. Cerrar Sesión")
+                    print("2. Enviar mensaje")
+                    print("3. Ver chats")
+                    print("4. Abrir un chat")
+                    print("5. Cerrar sesión")
                     sub_choice = input("Opción: ")
+
                     if sub_choice == "1":
+                        # Consulta de usuario
                         target_username = input("Nombre de usuario a consultar: ")
                         response = query_user_info(username, target_username)
                         if response.get("status") == "success":
@@ -232,15 +520,39 @@ def main():
                         else:
                             print(f"Error: {response.get('message')}")
                     elif sub_choice == "2":
+                        # Enviar mensaje
+                        send_message(username)
+                    elif sub_choice == "3":
+                        show_chats()
+                    elif sub_choice == "4":
+                        open_chat()
+                    elif sub_choice == "5":
+                        # Cerrar sesión
                         print("Cerrando sesión...")
                         break
                     else:
                         print("Opción no válida. Intenta nuevamente.")
+
         elif choice == "3":
             print("Saliendo del cliente. ¡Hasta luego!")
             break
         else:
             print("Opción no válida. Intenta nuevamente.")
 
-if __name__ == "__main__":
-    main()
+# if __name__ == "__main__":
+#     initialize_database()
+#     main()
+
+
+
+
+
+
+
+
+# Prueba de la base de datos
+initialize_database()
+save_message("user1", "user2", "Hola, ¿cómo estás?")
+messages = get_pending_messages("user2")
+print("Mensajes pendientes:", messages)
+mark_messages_as_delivered([msg[0] for msg in messages])
