@@ -157,6 +157,36 @@ def login_user(message, addr):
         return {"status": "error", "message": f"Error en el servidor: {str(e)}"}
 
 #region alive
+# def alive_signal(message, addr):
+#     username = message.get("username")
+#     public_key = message.get("public_key")
+
+#     log_message(f"Señal de vida recibida: {message} desde {addr}")
+
+#     if not username or not public_key:
+#         log_message("Error: Campos faltantes en señal de vida.")
+#         return {"status": "error", "message": "Faltan campos requeridos."}
+
+#     try:
+#         conn = sqlite3.connect('chat_manager.db')
+#         cursor = conn.cursor()
+#         cursor.execute("SELECT username FROM users WHERE username = ?", (username,))
+#         if cursor.fetchone():
+#             cursor.execute("UPDATE users SET ip = ?, public_key = ?, last_seen = ?, status = ? WHERE username = ?",
+#                            (addr[0], public_key, datetime.now(), "connected", username))
+#             conn.commit()
+#             conn.close()
+#             log_message(f"Señal de vida actualizada para {username} desde {addr[0]}.")
+#             return {"status": "success", "message": "Señal de vida actualizada."}
+#         else:
+#             conn.close()
+#             log_message(f"Error: Usuario no registrado {username} intentando enviar señal de vida.")
+#             return {"status": "error", "message": "Usuario no registrado."}
+#     except Exception as e:
+#         log_message(f"Error en el servidor durante la señal de vida de {username}: {str(e)}")
+#         return {"status": "error", "message": f"Error en el servidor: {str(e)}"}
+
+
 def alive_signal(message, addr):
     username = message.get("username")
     public_key = message.get("public_key")
@@ -170,10 +200,16 @@ def alive_signal(message, addr):
     try:
         conn = sqlite3.connect('chat_manager.db')
         cursor = conn.cursor()
-        cursor.execute("SELECT username FROM users WHERE username = ?", (username,))
-        if cursor.fetchone():
-            cursor.execute("UPDATE users SET ip = ?, public_key = ?, last_seen = ?, status = ? WHERE username = ?",
-                           (addr[0], public_key, datetime.now(), "connected", username))
+        cursor.execute("SELECT username, ip FROM users WHERE username = ?", (username,))
+        row = cursor.fetchone()
+        if row:
+            existing_ip = row[1]
+            if existing_ip != addr[0]:  # Si la IP cambió, actualizarla
+                log_message(f"Actualizando IP de {username} de {existing_ip} a {addr[0]}")
+            cursor.execute(
+                "UPDATE users SET ip = ?, public_key = ?, last_seen = ?, status = ? WHERE username = ?",
+                (addr[0], public_key, datetime.now(), "connected", username)
+            )
             conn.commit()
             conn.close()
             log_message(f"Señal de vida actualizada para {username} desde {addr[0]}.")
@@ -185,6 +221,7 @@ def alive_signal(message, addr):
     except Exception as e:
         log_message(f"Error en el servidor durante la señal de vida de {username}: {str(e)}")
         return {"status": "error", "message": f"Error en el servidor: {str(e)}"}
+
 
 #region user_info
 def get_user_info(message):

@@ -150,11 +150,75 @@ def login(username, password):
             return response
     except Exception as e:
         return {"status": "error", "message": f"Error de conexión: {str(e)}"}
+    
+#region logout
+
+def logout():
+    """Gestiona el cierre de sesión."""
+    stop_all_threads()  # Detener los hilos activos
+    global username
+    username = None
+    print(col("Sesión cerrada correctamente.", 'green'))
+
+
+
+stop_event = threading.Event()
+
+def stop_all_threads():
+    """Detiene todos los hilos en ejecución."""
+    stop_event.set()
+    print(col("Hilos detenidos.", 'yellow'))
+
 
 #region alive
+# def send_alive_signal(username, public_key_str):
+#     global GESTOR_HOST 
+#     while True:
+#         try:
+#             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+#                 s.connect((GESTOR_HOST, GESTOR_PORT))
+#                 message = {
+#                     "action": "alive_signal",
+#                     "username": username,
+#                     "public_key": public_key_str
+#                 }
+#                 s.sendall(json.dumps(message).encode())
+#                 response = s.recv(4096)
+#                 response = json.loads(response.decode())
+#                 if response.get("status") != "success":
+#                     print(f"Error en señal de vida: {response.get('message')}")
+#         except Exception as e:
+#             print(f"Error al enviar señal de vida: {str(e)}")
+#             while True:
+#                 gestor_ip = find_gestor()
+#                 if gestor_ip:
+#                     GESTOR_HOST = gestor_ip  
+#                     print(col(f"Nuevo gestor encontrado: {GESTOR_HOST}", 'green'))
+#                     break  
+#                 else:
+#                     print("Gestor no encontrado. Reintentando en 5 segundos...")
+#                     time.sleep(5)  
+#         time.sleep(ALIVE_INTERVAL)
+
+# def send_alive_signal(username, public_key_str):
+#     global GESTOR_HOST
+#     while not stop_event.is_set():
+#         try:
+#             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+#                 s.connect((GESTOR_HOST, GESTOR_PORT))
+#                 message = {
+#                     "action": "alive_signal",
+#                     "username": username,
+#                     "public_key": public_key_str
+#                 }
+#                 s.sendall(json.dumps(message).encode())
+#         except Exception as e:
+#             print(f"Error al enviar señal de vida: {str(e)}")
+#         time.sleep(ALIVE_INTERVAL)
+
 def send_alive_signal(username, public_key_str):
-    global GESTOR_HOST 
-    while True:
+    global GESTOR_HOST
+    while not stop_event.is_set():
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 s.connect((GESTOR_HOST, GESTOR_PORT))
@@ -164,22 +228,16 @@ def send_alive_signal(username, public_key_str):
                     "public_key": public_key_str
                 }
                 s.sendall(json.dumps(message).encode())
-                response = s.recv(4096)
-                response = json.loads(response.decode())
-                if response.get("status") != "success":
-                    print(f"Error en señal de vida: {response.get('message')}")
         except Exception as e:
-            print(f"Error al enviar señal de vida: {str(e)}")
-            while True:
-                gestor_ip = find_gestor()
-                if gestor_ip:
-                    GESTOR_HOST = gestor_ip  
-                    print(col(f"Nuevo gestor encontrado: {GESTOR_HOST}", 'green'))
-                    break  
-                else:
-                    print("Gestor no encontrado. Reintentando en 5 segundos...")
-                    time.sleep(5)  
+            print(col(f"Error al enviar señal de vida: {str(e)}", 'red'))
+            # Si falla, reintentar localizar el gestor
+            GESTOR_HOST = find_gestor()
+            if not GESTOR_HOST:
+                print(col("No se encontró gestor, reintentando en 5 segundos.", 'red'))
+                time.sleep(5)
         time.sleep(ALIVE_INTERVAL)
+
+
 
 
 #region user_query
@@ -446,35 +504,89 @@ def send_message(username):
 
 
 
+# def start_message_listener(username):
+#     """Inicia un servidor para recibir mensajes de otros usuarios."""
+#     def listen():
+#         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
+#             server_socket.bind(('', CLIENT_PORT))
+#             server_socket.listen(5)  # Escuchar hasta 5 conexiones simultáneas
+#             print(col(f"[{username}] Escuchando mensajes en el puerto {CLIENT_PORT}...", 'green'))
+            
+#             while True:
+#                 conn, addr = server_socket.accept()
+#                 with conn:
+#                     try:
+#                         # Recibir datos del socket
+#                         message_data = conn.recv(BUFFER_SIZE).decode()
+#                         message_json = json.loads(message_data)  # Convertir de JSON a diccionario
+
+#                         # Extraer información del mensaje
+#                         sender = message_json.get("sender")
+#                         content = message_json.get("content")
+
+#                         # Validar campos obligatorios
+#                         if not sender or not content:
+#                             print(col(f"Mensaje inválido recibido de {addr[0]}", 'red'))
+#                             continue
+                        
+#                         # Mostrar mensaje recibido
+#                         print(col(f"Nuevo mensaje de {sender}: {content}", 'cyan'))
+                        
+#                         # Obtener o crear el chat con el remitente
+#                         chat_id = get_or_create_chat(sender)
+                        
+#                         # Guardar el mensaje en la base de datos
+#                         save_message(chat_id, sender, content, delivered=True)
+#                     except json.JSONDecodeError:
+#                         print(col(f"Error al decodificar el mensaje de {addr[0]}", 'red'))
+#                     except Exception as e:
+#                         print(col(f"Error al procesar mensaje de {addr[0]}: {str(e)}", 'red'))
+
+#     # Ejecutar el servidor en un hilo separado
+#     listener_thread = threading.Thread(target=listen, daemon=True)
+#     listener_thread.start()
+
+
+listener_thread = None
+
 def start_message_listener(username):
+    global listener_thread
     def listen():
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
+            server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)  # Permitir reutilización del puerto
             server_socket.bind(('', CLIENT_PORT))
-            server_socket.listen(5)  # Escuchar hasta 5 conexiones simultáneas
+            server_socket.listen(5)
             print(col(f"[{username}] Escuchando mensajes en el puerto {CLIENT_PORT}...", 'green'))
             
-            while True:
+            while not stop_event.is_set():
                 conn, addr = server_socket.accept()
                 with conn:
                     try:
-                        message = conn.recv(BUFFER_SIZE).decode()
-                        print(col(f"Nuevo mensaje de {addr[0]}: {message}", 'cyan'))
-                        
-                        # Aquí puedes guardar el mensaje en la base de datos SQLite
-                        save_message(sender=addr[0], receiver=username, message=message, delivered=True)
+                        message_data = conn.recv(BUFFER_SIZE).decode()
+                        message_json = json.loads(message_data)
+                        sender = message_json.get("sender")
+                        content = message_json.get("content")
+                        if sender and content:
+                            print(col(f"Nuevo mensaje de {sender}: {content}", 'cyan'))
                     except Exception as e:
                         print(col(f"Error al procesar mensaje: {str(e)}", 'red'))
 
-    # Ejecutar el servidor en un hilo separado
+    if listener_thread and listener_thread.is_alive():
+        print(col("Listener ya está corriendo.", 'yellow'))
+        return
+
     listener_thread = threading.Thread(target=listen, daemon=True)
     listener_thread.start()
 
 
 
+
 #region main
 def main():
-    GESTOR_HOST=find_gestor()
-    print(col(f"Found gestor at: {GESTOR_HOST}",'green'))
+    global GESTOR_HOST, stop_event
+
+    GESTOR_HOST = find_gestor()
+    print(col(f"Gestor encontrado en: {GESTOR_HOST}", 'green'))
 
     private_key, public_key = load_or_generate_keys()
     public_key_str = public_key.public_bytes(
@@ -482,7 +594,7 @@ def main():
         format=serialization.PublicFormat.SubjectPublicKeyInfo
     ).decode()
 
-    print(col("Bienvenido al Cliente de Chat P2P",'blue'))
+    print(col("Bienvenido al Cliente de Chat P2P", 'blue'))
     while True:
         print("\nSelecciona una opción:")
         print("1. Registrarse")
@@ -502,23 +614,19 @@ def main():
             if response.get("status") == "success":
                 print("Puedes ahora iniciar sesión.")
         elif choice == "2":
+            # Iniciar sesión
             username = input("Nombre de usuario: ")
             password = getpass("Contraseña: ")
             response = login(username, password)
             print(response.get("message"))
             if response.get("status") == "success":
-                # Revisar mensajes pendientes
-                review_pending_messages(username)
-                # Iniciar hilo para escuchar mensajes
+                stop_event.clear()  # Reinicia el evento de hilos
+                review_pending_messages()
                 start_message_listener(username)
 
-                # Iniciar hilo de señales de vida
                 alive_thread = threading.Thread(target=send_alive_signal, args=(username, public_key_str), daemon=True)
                 alive_thread.start()
-                print("Señales de vida enviándose en segundo plano.")
 
-
-                # Iniciar interfaz de consultas
                 while True:
                     print("\nOpciones disponibles:")
                     print("1. Consultar usuario")
@@ -568,12 +676,68 @@ if __name__ == "__main__":
 
 
 
+# def main():
+#     global GESTOR_HOST, stop_event
 
+#     GESTOR_HOST = find_gestor()
+#     print(col(f"Gestor encontrado en: {GESTOR_HOST}", 'green'))
 
+#     private_key, public_key = load_or_generate_keys()
+#     public_key_str = public_key.public_bytes(
+#         encoding=serialization.Encoding.PEM,
+#         format=serialization.PublicFormat.SubjectPublicKeyInfo
+#     ).decode()
 
-# # Prueba de la base de datos
-# initialize_database()
-# save_message("user1", "user2", "Hola, ¿cómo estás?")
-# messages = get_pending_messages("user2")
-# print("Mensajes pendientes:", messages)
-# mark_messages_as_delivered([msg[0] for msg in messages])
+#     print(col("Bienvenido al Cliente de Chat P2P", 'blue'))
+#     while True:
+#         print("\nSelecciona una opción:")
+#         print("1. Registrarse")
+#         print("2. Iniciar Sesión")
+#         print("3. Salir")
+#         choice = input("Opción: ")
+
+#         if choice == "1":
+#             # Registro
+#             ...
+#         elif choice == "2":
+#             # Iniciar sesión
+#             username = input("Nombre de usuario: ")
+#             password = getpass("Contraseña: ")
+#             response = login(username, password)
+#             print(response.get("message"))
+#             if response.get("status") == "success":
+#                 stop_event.clear()  # Reinicia el evento de hilos
+#                 review_pending_messages()
+#                 start_message_listener(username)
+
+#                 alive_thread = threading.Thread(target=send_alive_signal, args=(username, public_key_str), daemon=True)
+#                 alive_thread.start()
+
+#                 while True:
+#                     print("\nOpciones disponibles:")
+#                     print("1. Consultar usuario")
+#                     print("2. Enviar mensaje")
+#                     print("3. Ver chats")
+#                     print("4. Abrir un chat")
+#                     print("5. Cerrar sesión")
+#                     sub_choice = input("Opción: ")
+
+#                     if sub_choice == "1":
+#                         # Consultar usuario
+#                         ...
+#                     elif sub_choice == "2":
+#                         # Enviar mensaje
+#                         ...
+#                     elif sub_choice == "3":
+#                         # Ver chats
+#                         ...
+#                     elif sub_choice == "4":
+#                         # Abrir chat
+#                         ...
+#                     elif sub_choice == "5":
+#                         # Cerrar sesión
+#                         logout()
+#                         break
+#         elif choice == "3":
+#             print("Saliendo del cliente. ¡Hasta luego!")
+#             break
