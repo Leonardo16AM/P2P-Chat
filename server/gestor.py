@@ -5,14 +5,32 @@ import json
 import bcrypt
 import time
 from datetime import datetime, timedelta
+import sys 
+import os
+#region lock
 
-# Configuración
+LOCK_FILE = 'gestor.lock'
+
+def check_single_instance():
+    if os.path.exists(LOCK_FILE):
+        print("Otra instancia del cliente ya está en ejecución.")
+        sys.exit()
+    else:
+        with open(LOCK_FILE, 'w') as f:
+            f.write('lock')
+
+def remove_lock():
+    if os.path.exists(LOCK_FILE):
+        os.remove(LOCK_FILE)
+
+#region config
 HOST = '0.0.0.0'  # Escuchar en todas las interfaces
 PORT = 65432      # Puerto a usar
 ALIVE_INTERVAL = 10  # Intervalo de alive_signal en segundos
 TIMEOUT = 60         # Tiempo antes de considerar a un usuario como desconectado
 LOG_FILE = 'gestor.log'
 
+#region db_init
 def init_db():
     conn = sqlite3.connect('chat_manager.db')
     cursor = conn.cursor()
@@ -29,10 +47,16 @@ def init_db():
     conn.commit()
     conn.close()
 
+#region logs
 def log_message(message):
     with open(LOG_FILE, 'a') as log_file:
         log_file.write(f"{datetime.now()} - {message}\n")
 
+
+
+
+
+#region utils
 def handle_client(conn, addr):
     log_message(f"Conexión establecida desde {addr}")
     try:
@@ -71,6 +95,7 @@ def process_message(message, addr):
         log_message(f"Acción no reconocida desde {addr}: {action}")
         return {"status": "error", "message": "Acción no reconocida."}
 
+#region register
 def register_user(message):
     username = message.get("username")
     password = message.get("password")
@@ -82,9 +107,9 @@ def register_user(message):
         log_message("Error: Campos faltantes durante el registro.")
         return {"status": "error", "message": "Faltan campos requeridos."}
 
-    hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt())
 
-    try:
+    try:  
+        hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt())
         conn = sqlite3.connect('chat_manager.db')
         cursor = conn.cursor()
         cursor.execute("INSERT INTO users (username, password, ip, public_key, last_seen, status) VALUES (?, ?, ?, ?, ?, ?)",
@@ -100,6 +125,7 @@ def register_user(message):
         log_message(f"Error en el servidor durante el registro de {username}: {str(e)}")
         return {"status": "error", "message": f"Error en el servidor: {str(e)}"}
 
+#region login
 def login_user(message, addr):
     username = message.get("username")
     password = message.get("password")
@@ -130,6 +156,7 @@ def login_user(message, addr):
         log_message(f"Error en el servidor durante el inicio de sesión de {username}: {str(e)}")
         return {"status": "error", "message": f"Error en el servidor: {str(e)}"}
 
+#region alive
 def alive_signal(message, addr):
     username = message.get("username")
     public_key = message.get("public_key")
@@ -159,6 +186,7 @@ def alive_signal(message, addr):
         log_message(f"Error en el servidor durante la señal de vida de {username}: {str(e)}")
         return {"status": "error", "message": f"Error en el servidor: {str(e)}"}
 
+#region user_info
 def get_user_info(message):
     requester = message.get("username")
     target = message.get("target_username")
@@ -191,6 +219,7 @@ def get_user_info(message):
         log_message(f"Error en el servidor al obtener información de {target}: {str(e)}")
         return {"status": "error", "message": f"Error en el servidor: {str(e)}"}
 
+#region disconect
 def cleanup_users():
     while True:
         try:
@@ -208,6 +237,7 @@ def cleanup_users():
             log_message(f"Error en limpieza de usuarios: {str(e)}")
             time.sleep(ALIVE_INTERVAL)
 
+#region startup
 def start_server():
     init_db()
     cleanup_thread = threading.Thread(target=cleanup_users, daemon=True)
@@ -223,4 +253,8 @@ def start_server():
             client_thread.start()
 
 if __name__ == "__main__":
-    start_server()
+    check_single_instance()
+    try:
+        start_server()
+    finally:
+        remove_lock()

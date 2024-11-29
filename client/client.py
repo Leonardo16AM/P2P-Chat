@@ -10,6 +10,7 @@ from cryptography.hazmat.backends import default_backend
 import logging
 from termcolor import colored as col
 import sqlite3
+import sys
 
 
 BROADCAST_PORT = 55555  # Puerto para el broadcast
@@ -54,6 +55,23 @@ ALIVE_INTERVAL = 10
 # Rutas de almacenamiento de llaves
 PRIVATE_KEY_FILE = 'private_key.pem'
 PUBLIC_KEY_FILE = 'public_key.pem'
+
+#region lock
+
+LOCK_FILE = 'client.lock'
+
+def check_single_instance():
+    if os.path.exists(LOCK_FILE):
+        print("Otra instancia del cliente ya está en ejecución.")
+        sys.exit()
+    else:
+        with open(LOCK_FILE, 'w') as f:
+            f.write('lock')
+
+def remove_lock():
+    if os.path.exists(LOCK_FILE):
+        os.remove(LOCK_FILE)
+
 
 #region keys
 def load_or_generate_keys():
@@ -103,17 +121,14 @@ def register(username, password, public_key_str):
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.connect((GESTOR_HOST, GESTOR_PORT))
-            print(col(f"{GESTOR_HOST}:{GESTOR_PORT}",'blue'))
             message = {
                 "action": "register",
                 "username": username,
                 "password": password,
                 "public_key": public_key_str
             }
-            print(col(f"message {message}",'red'))
             s.sendall(json.dumps(message).encode())
             response = s.recv(4096)
-            print(col(f"respppp {response}",'red'))
             response = json.loads(response.decode())
             return response
     except Exception as e:
@@ -543,9 +558,12 @@ def main():
             print("Opción no válida. Intenta nuevamente.")
 
 if __name__ == "__main__":
-    initialize_database()
-    main()
-
+    check_single_instance()
+    try:
+        initialize_database()
+        main()
+    finally:
+        remove_lock()
 
 
 
