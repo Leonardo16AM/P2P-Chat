@@ -103,14 +103,17 @@ def register(username, password, public_key_str):
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.connect((GESTOR_HOST, GESTOR_PORT))
+            print(col(f"{GESTOR_HOST}:{GESTOR_PORT}",'blue'))
             message = {
                 "action": "register",
                 "username": username,
                 "password": password,
                 "public_key": public_key_str
             }
+            print(col(f"message {message}",'red'))
             s.sendall(json.dumps(message).encode())
             response = s.recv(4096)
+            print(col(f"respppp {response}",'red'))
             response = json.loads(response.decode())
             return response
     except Exception as e:

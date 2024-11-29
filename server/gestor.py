@@ -39,19 +39,25 @@ def handle_client(conn, addr):
         while True:
             data = conn.recv(4096)
             if not data:
+                log_message(f"Conexión cerrada por el cliente {addr}")
                 break
             try:
+                log_message(f"Datos recibidos desde {addr}: {data.decode()}")
                 message = json.loads(data.decode())
                 response = process_message(message, addr)
             except json.JSONDecodeError:
                 response = {"status": "error", "message": "Formato JSON inválido."}
+                log_message(f"Error de JSON desde {addr}: {data}")
             conn.sendall(json.dumps(response).encode())
+            log_message(f"Respuesta enviada a {addr}: {response}")
     except ConnectionResetError:
         log_message(f"Conexión perdida con {addr}")
     finally:
         conn.close()
+        log_message(f"Conexión cerrada con {addr}")
 
 def process_message(message, addr):
+    log_message(f"Procesando mensaje desde {addr}: {message}")
     action = message.get("action")
     if action == "register":
         return register_user(message)
@@ -62,15 +68,18 @@ def process_message(message, addr):
     elif action == "get_user":
         return get_user_info(message)
     else:
+        log_message(f"Acción no reconocida desde {addr}: {action}")
         return {"status": "error", "message": "Acción no reconocida."}
 
-#region register
 def register_user(message):
     username = message.get("username")
     password = message.get("password")
     public_key = message.get("public_key")
 
+    log_message(f"Intento de registro: {message}")
+
     if not username or not password or not public_key:
+        log_message("Error: Campos faltantes durante el registro.")
         return {"status": "error", "message": "Faltan campos requeridos."}
 
     hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt())
@@ -91,12 +100,14 @@ def register_user(message):
         log_message(f"Error en el servidor durante el registro de {username}: {str(e)}")
         return {"status": "error", "message": f"Error en el servidor: {str(e)}"}
 
-#region login
 def login_user(message, addr):
     username = message.get("username")
     password = message.get("password")
 
+    log_message(f"Intento de login: {message} desde {addr}")
+
     if not username or not password:
+        log_message("Error: Campos faltantes durante el inicio de sesión.")
         return {"status": "error", "message": "Faltan campos requeridos."}
 
     try:
@@ -119,12 +130,14 @@ def login_user(message, addr):
         log_message(f"Error en el servidor durante el inicio de sesión de {username}: {str(e)}")
         return {"status": "error", "message": f"Error en el servidor: {str(e)}"}
 
-#region alive
 def alive_signal(message, addr):
     username = message.get("username")
     public_key = message.get("public_key")
 
+    log_message(f"Señal de vida recibida: {message} desde {addr}")
+
     if not username or not public_key:
+        log_message("Error: Campos faltantes en señal de vida.")
         return {"status": "error", "message": "Faltan campos requeridos."}
 
     try:
@@ -146,12 +159,14 @@ def alive_signal(message, addr):
         log_message(f"Error en el servidor durante la señal de vida de {username}: {str(e)}")
         return {"status": "error", "message": f"Error en el servidor: {str(e)}"}
 
-#region user
 def get_user_info(message):
     requester = message.get("username")
     target = message.get("target_username")
 
+    log_message(f"Solicitud de información del usuario {target} por {requester}")
+
     if not requester or not target:
+        log_message("Error: Campos faltantes en solicitud de información del usuario.")
         return {"status": "error", "message": "Faltan campos requeridos."}
 
     try:
@@ -176,7 +191,6 @@ def get_user_info(message):
         log_message(f"Error en el servidor al obtener información de {target}: {str(e)}")
         return {"status": "error", "message": f"Error en el servidor: {str(e)}"}
 
-#region cleanup
 def cleanup_users():
     while True:
         try:
@@ -194,7 +208,6 @@ def cleanup_users():
             log_message(f"Error en limpieza de usuarios: {str(e)}")
             time.sleep(ALIVE_INTERVAL)
 
-#region start
 def start_server():
     init_db()
     cleanup_thread = threading.Thread(target=cleanup_users, daemon=True)

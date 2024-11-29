@@ -42,7 +42,7 @@ if __name__ == "__main__":
     answerer_thread = threading.Thread(target=broadcast_answer, daemon=True)
     answerer_thread.start()
 
-    logging.info("Servidor gestor en ejecución. Presiona Ctrl+C para salir.")
+    logging.info("Gestor Locator en ejecución")
     try:
         while True:
             time.sleep(1)
