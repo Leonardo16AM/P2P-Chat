@@ -58,30 +58,28 @@ def log_message(message):
 
 #region utils
 def handle_client(conn, addr):
-    log_message(f"Conexión establecida desde {addr}")
+    log_message(f">> Conexión establecida desde {addr}")
     try:
         while True:
             data = conn.recv(4096)
             if not data:
-                log_message(f"Conexión cerrada por el cliente {addr}")
                 break
             try:
-                log_message(f"Datos recibidos desde {addr}: {data.decode()}")
+                log_message(f"\tDatos recibidos desde {addr}: {data.decode()}")
                 message = json.loads(data.decode())
                 response = process_message(message, addr)
             except json.JSONDecodeError:
                 response = {"status": "error", "message": "Formato JSON inválido."}
-                log_message(f"Error de JSON desde {addr}: {data}")
+                log_message(f"\tError de JSON desde {addr}: {data}")
             conn.sendall(json.dumps(response).encode())
-            log_message(f"Respuesta enviada a {addr}: {response}")
+            log_message(f"\tRespuesta enviada a {addr}: {response}")
     except ConnectionResetError:
-        log_message(f"Conexión perdida con {addr}")
+        log_message(f"\tConexión perdida con {addr}")
     finally:
         conn.close()
-        log_message(f"Conexión cerrada con {addr}")
 
 def process_message(message, addr):
-    log_message(f"Procesando mensaje desde {addr}: {message}")
+    log_message(f"\tProcesando mensaje desde {addr}: {message}")
     action = message.get("action")
     if action == "register":
         return register_user(message)
@@ -92,7 +90,7 @@ def process_message(message, addr):
     elif action == "get_user":
         return get_user_info(message)
     else:
-        log_message(f"Acción no reconocida desde {addr}: {action}")
+        log_message(f"\tAcción no reconocida desde {addr}: {action}")
         return {"status": "error", "message": "Acción no reconocida."}
 
 #region register
@@ -101,7 +99,7 @@ def register_user(message):
     password = message.get("password")
     public_key = message.get("public_key")
 
-    log_message(f"Intento de registro: {message}")
+    log_message(f"\tIntento de registro: {message}")
 
     if not username or not password or not public_key:
         log_message("Error: Campos faltantes durante el registro.")
@@ -116,13 +114,13 @@ def register_user(message):
                        (username, hashed, "", public_key, datetime.now(), "disconnected"))
         conn.commit()
         conn.close()
-        log_message(f"Usuario {username} registrado exitosamente.")
+        log_message(f"\tUsuario {username} registrado exitosamente.")
         return {"status": "success", "message": "Usuario registrado exitosamente."}
     except sqlite3.IntegrityError:
-        log_message(f"Error: El nombre de usuario {username} ya existe.")
+        log_message(f"\tError: El nombre de usuario {username} ya existe.")
         return {"status": "error", "message": "El nombre de usuario ya existe."}
     except Exception as e:
-        log_message(f"Error en el servidor durante el registro de {username}: {str(e)}")
+        log_message(f"\tError en el servidor durante el registro de {username}: {str(e)}")
         return {"status": "error", "message": f"Error en el servidor: {str(e)}"}
 
 #region login
@@ -130,7 +128,7 @@ def login_user(message, addr):
     username = message.get("username")
     password = message.get("password")
 
-    log_message(f"Intento de login: {message} desde {addr}")
+    log_message(f"\tIntento de login: {message} desde {addr}")
 
     if not username or not password:
         log_message("Error: Campos faltantes durante el inicio de sesión.")
@@ -146,52 +144,22 @@ def login_user(message, addr):
                            (addr[0], datetime.now(), "connected", username))
             conn.commit()
             conn.close()
-            log_message(f"Usuario {username} autenticado exitosamente desde {addr[0]}.")
+            log_message(f"\tUsuario {username} autenticado exitosamente desde {addr[0]}.")
             return {"status": "success", "message": "Autenticación exitosa."}
         else:
             conn.close()
-            log_message(f"Error: Credenciales inválidas para {username}.")
+            log_message(f"\tError: Credenciales inválidas para {username}.")
             return {"status": "error", "message": "Credenciales inválidas."}
     except Exception as e:
-        log_message(f"Error en el servidor durante el inicio de sesión de {username}: {str(e)}")
+        log_message(f"\tError en el servidor durante el inicio de sesión de {username}: {str(e)}")
         return {"status": "error", "message": f"Error en el servidor: {str(e)}"}
 
 #region alive
-# def alive_signal(message, addr):
-#     username = message.get("username")
-#     public_key = message.get("public_key")
-
-#     log_message(f"Señal de vida recibida: {message} desde {addr}")
-
-#     if not username or not public_key:
-#         log_message("Error: Campos faltantes en señal de vida.")
-#         return {"status": "error", "message": "Faltan campos requeridos."}
-
-#     try:
-#         conn = sqlite3.connect('chat_manager.db')
-#         cursor = conn.cursor()
-#         cursor.execute("SELECT username FROM users WHERE username = ?", (username,))
-#         if cursor.fetchone():
-#             cursor.execute("UPDATE users SET ip = ?, public_key = ?, last_seen = ?, status = ? WHERE username = ?",
-#                            (addr[0], public_key, datetime.now(), "connected", username))
-#             conn.commit()
-#             conn.close()
-#             log_message(f"Señal de vida actualizada para {username} desde {addr[0]}.")
-#             return {"status": "success", "message": "Señal de vida actualizada."}
-#         else:
-#             conn.close()
-#             log_message(f"Error: Usuario no registrado {username} intentando enviar señal de vida.")
-#             return {"status": "error", "message": "Usuario no registrado."}
-#     except Exception as e:
-#         log_message(f"Error en el servidor durante la señal de vida de {username}: {str(e)}")
-#         return {"status": "error", "message": f"Error en el servidor: {str(e)}"}
-
-
 def alive_signal(message, addr):
     username = message.get("username")
     public_key = message.get("public_key")
 
-    log_message(f"Señal de vida recibida: {message} desde {addr}")
+    log_message(f"\t\tSeñal de vida recibida: {message} desde {addr}")
 
     if not username or not public_key:
         log_message("Error: Campos faltantes en señal de vida.")
@@ -200,26 +168,20 @@ def alive_signal(message, addr):
     try:
         conn = sqlite3.connect('chat_manager.db')
         cursor = conn.cursor()
-        cursor.execute("SELECT username, ip FROM users WHERE username = ?", (username,))
-        row = cursor.fetchone()
-        if row:
-            existing_ip = row[1]
-            if existing_ip != addr[0]:  # Si la IP cambió, actualizarla
-                log_message(f"Actualizando IP de {username} de {existing_ip} a {addr[0]}")
-            cursor.execute(
-                "UPDATE users SET ip = ?, public_key = ?, last_seen = ?, status = ? WHERE username = ?",
-                (addr[0], public_key, datetime.now(), "connected", username)
-            )
+        cursor.execute("SELECT username FROM users WHERE username = ?", (username,))
+        if cursor.fetchone():
+            cursor.execute("UPDATE users SET ip = ?, public_key = ?, last_seen = ?, status = ? WHERE username = ?",
+                           (addr[0], public_key, datetime.now(), "connected", username))
             conn.commit()
             conn.close()
-            log_message(f"Señal de vida actualizada para {username} desde {addr[0]}.")
+            log_message(f"\t\tSeñal de vida actualizada para {username} desde {addr[0]}.")
             return {"status": "success", "message": "Señal de vida actualizada."}
         else:
             conn.close()
-            log_message(f"Error: Usuario no registrado {username} intentando enviar señal de vida.")
+            log_message(f"\tError: Usuario no registrado {username} intentando enviar señal de vida.")
             return {"status": "error", "message": "Usuario no registrado."}
     except Exception as e:
-        log_message(f"Error en el servidor durante la señal de vida de {username}: {str(e)}")
+        log_message(f"\tError en el servidor durante la señal de vida de {username}: {str(e)}")
         return {"status": "error", "message": f"Error en el servidor: {str(e)}"}
 
 
@@ -228,7 +190,7 @@ def get_user_info(message):
     requester = message.get("username")
     target = message.get("target_username")
 
-    log_message(f"Solicitud de información del usuario {target} por {requester}")
+    log_message(f"\tSolicitud de información del usuario {target} por {requester}")
 
     if not requester or not target:
         log_message("Error: Campos faltantes en solicitud de información del usuario.")
@@ -243,17 +205,17 @@ def get_user_info(message):
             ip, public_key, last_seen, status = row
             if status != "connected":
                 conn.close()
-                log_message(f"Error: El usuario {target} está desconectado.")
+                log_message(f"\tError: El usuario {target} está desconectado.")
                 return {"status": "error", "message": "El usuario está desconectado."}
             conn.close()
-            log_message(f"Información del usuario {target} proporcionada a {requester}.")
+            log_message(f"\tInformación del usuario {target} proporcionada a {requester}.")
             return {"status": "success", "ip": ip, "public_key": public_key}
         else:
             conn.close()
-            log_message(f"Error: Usuario {target} no encontrado solicitado por {requester}.")
+            log_message(f"\tError: Usuario {target} no encontrado solicitado por {requester}.")
             return {"status": "error", "message": "Usuario no encontrado."}
     except Exception as e:
-        log_message(f"Error en el servidor al obtener información de {target}: {str(e)}")
+        log_message(f"\tError en el servidor al obtener información de {target}: {str(e)}")
         return {"status": "error", "message": f"Error en el servidor: {str(e)}"}
 
 #region disconect
@@ -268,10 +230,10 @@ def cleanup_users():
             conn.commit()
             conn.close()
             if updated > 0:
-                log_message(f"{updated} usuarios actualizados a estado 'disconnected' por inactividad.")
+                log_message(f"\t{updated} usuarios actualizados a estado 'disconnected' por inactividad.")
             time.sleep(ALIVE_INTERVAL)
         except Exception as e:
-            log_message(f"Error en limpieza de usuarios: {str(e)}")
+            log_message(f"\tError en limpieza de usuarios: {str(e)}")
             time.sleep(ALIVE_INTERVAL)
 
 #region startup
@@ -283,7 +245,7 @@ def start_server():
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind((HOST, PORT))
         s.listen()
-        log_message(f"Servidor iniciado en {HOST}:{PORT}")
+        log_message(f"\tServidor iniciado en {HOST}:{PORT}")
         while True:
             conn, addr = s.accept()
             client_thread = threading.Thread(target=handle_client, args=(conn, addr), daemon=True)
