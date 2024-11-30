@@ -7,20 +7,17 @@ RUN apt-get update && apt-get install -y \
     libsqlite3-dev \
     gcc \
     build-essential\ 
+    iputils-ping \
+    iproute2 \ 
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 COPY ./server /app
 
-# RUN pip install --upgrade pip
-
-# RUN pip cache purge
-
-# RUN pip install cryptography==2.8 python_bcrypt==0.3.2 termcolor==2.5.0
-
 RUN pip install --no-cache-dir -r requirements.txt
 
-# RUN pip install --no-cache-dir --trusted-host pypi.org --trusted-host files.pythonhosted.org -r requirements.txt
+# CMD ["sh", "-c", "python3 locator.py & python3 gestor.py & wait"]
+# CMD ["python3","gestor.py"]
 
-CMD ["sh", "-c", "python3 locator.py & python3 gestor.py & wait"]
+CMD ["sh", "-c", "/app/startup.sh & python3 gestor.py & wait"]

@@ -1,0 +1,7 @@
+.:53 {
+    file /db.server {
+        reload 10s
+    }
+    log
+    errors
+}

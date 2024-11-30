@@ -34,6 +34,7 @@ logging.basicConfig(filename='client.log', level=logging.INFO,
 
  
 def find_gestor():
+    return "192.168.1.2"
     """Descubre la dirección IP del gestor mediante broadcast."""
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP) as s:
         s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)  
@@ -215,12 +216,12 @@ def send_alive_signal(username, public_key_str, stop_event):
                 if response.get("status") != "success":
                     logging.error(f"Error en señal de vida: {response.get('message')}")
         except Exception as e:
-            print(f"Error al enviar señal de vida: {str(e)}")
+            logging.error(f"Error al enviar señal de vida: {str(e)}")
             while not stop_event.is_set():
                 gestor_ip = find_gestor()
                 if gestor_ip:
                     GESTOR_HOST = gestor_ip  
-                    logging.info(col(f"Nuevo gestor encontrado: {GESTOR_HOST}", 'green'))
+                    logging.info(f"Nuevo gestor encontrado: {GESTOR_HOST}")
                     break  
                 else:
                     logging.error("Gestor no encontrado. Reintentando en 5 segundos...")

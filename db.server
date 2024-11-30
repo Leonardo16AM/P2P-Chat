@@ -1,0 +1,10 @@
+$TTL    10
+@       IN      SOA     ddns.local. root.ddns.local. (
+                        1   ; Serial
+                        10  ; Refresh
+                        10  ; Retry
+                        10  ; Expire
+                        10 ) ; Negative Cache TTL
+
+        IN      NS      ddns.local.
+server  IN      A       192.168.1.2

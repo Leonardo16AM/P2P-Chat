@@ -11,6 +11,13 @@ then
     exit 1
 fi
 
+echo "Construyendo la imagen del router..."
+docker build -t router-image -f Dockerfile.router .
+if [ $? -ne 0 ]; then
+    echo "Error al construir la imagen del router."
+    exit 1
+fi
+
 echo "Construyendo la imagen del servidor..."
 docker build -t server-image -f Dockerfile.server .
 if [ $? -ne 0 ]; then
@@ -25,12 +32,6 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# echo "Creando la red de Docker..."
-# docker network create --subnet=192.168.1.0/24 chat_network
-# if [ $? -ne 0 ]; then
-#     echo "Error al crear la red de Docker. Es posible que ya exista."
-# fi
-
 echo "Levantando los contenedores con Docker Compose..."
 docker-compose up -d
 if [ $? -ne 0 ]; then
@@ -38,4 +39,4 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-echo "RED MONTADA CON EXITO"
+echo "La red ha sido montada con exito."

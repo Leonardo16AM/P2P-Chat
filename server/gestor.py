@@ -7,8 +7,16 @@ import time
 from datetime import datetime, timedelta
 import sys 
 import os
-#region lock
+import subprocess
 
+#region config
+HOST = '0.0.0.0'  # Escuchar en todas las interfaces
+PORT = 65432      # Puerto a usar
+ALIVE_INTERVAL = 10  # Intervalo de alive_signal en segundos
+TIMEOUT = 60         # Tiempo antes de considerar a un usuario como desconectado
+LOG_FILE = 'gestor.log'
+
+#region lock
 LOCK_FILE = 'gestor.lock'
 
 def check_single_instance():
@@ -23,12 +31,77 @@ def remove_lock():
     if os.path.exists(LOCK_FILE):
         os.remove(LOCK_FILE)
 
-#region config
-HOST = '0.0.0.0'  # Escuchar en todas las interfaces
-PORT = 65432      # Puerto a usar
-ALIVE_INTERVAL = 10  # Intervalo de alive_signal en segundos
-TIMEOUT = 60         # Tiempo antes de considerar a un usuario como desconectado
-LOG_FILE = 'gestor.log'
+#region DDNS
+DDNS_ZONE_FILE = "./db.server"
+SERVER_NAME = "server"
+PREVIOUS_IP = None  
+
+def get_container_ip(container_name, network_name):
+    """
+    Obtiene la dirección IP de un contenedor en una red específica ejecutando `docker inspect`.
+    """
+    try:
+        result = subprocess.run(
+            ["docker", "inspect", "-f", f"{{{{.NetworkSettings.Networks.{network_name}.IPAddress}}}}", container_name],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        ip_address = result.stdout.strip()
+        if ip_address:
+            return ip_address
+        else:
+            log_message(f"No se encontró una IP para el contenedor {container_name} en la red {network_name}.")
+            return None
+    except subprocess.CalledProcessError as e:
+        log_message(f"Error al ejecutar docker inspect: {e}")
+        return None
+
+def update_ddns(new_ip):
+    """
+    Actualiza el archivo de zona de DDNS y recarga CoreDNS.
+    """
+    global PREVIOUS_IP
+
+    if new_ip == PREVIOUS_IP:
+        return
+
+    try:
+        with open(DDNS_ZONE_FILE, "r") as f:
+            lines = f.readlines()
+        
+        updated_lines = []
+        for line in lines:
+            if line.startswith(f"{SERVER_NAME}\tIN\tA"):
+                updated_lines.append(f"{SERVER_NAME}\tIN\tA\t{new_ip}\n")
+            else:
+                updated_lines.append(line)
+        
+        with open(DDNS_ZONE_FILE, "w") as f:
+            f.writelines(updated_lines)
+
+        subprocess.run(["docker", "exec", "ddns", "kill", "-HUP", "1"], check=True)
+        PREVIOUS_IP = new_ip
+        log_message(f"DDNS actualizado: {SERVER_NAME} -> {new_ip}")
+
+    except Exception as e:
+        log_message(f"Error al actualizar el DDNS: {e}")
+
+def monitor_and_update(container_name, network_name):
+    """
+    Monitorea continuamente la IP del contenedor y actualiza el DDNS si es necesario.
+    """
+    while True:
+        try:
+            current_ip = get_container_ip(container_name, network_name)
+            if current_ip:
+                update_ddns(current_ip)
+            else:
+                print("No se pudo obtener la IP actual.")
+        except Exception as e:
+            print(f"Error durante la actualización de DDNS: {e}")
+
+        time.sleep(7)
 
 #region db_init
 def init_db():
@@ -51,10 +124,6 @@ def init_db():
 def log_message(message):
     with open(LOG_FILE, 'a') as log_file:
         log_file.write(f"{datetime.now()} - {message}\n")
-
-
-
-
 
 #region utils
 def handle_client(conn, addr):
@@ -238,6 +307,12 @@ def cleanup_users():
 
 #region startup
 def start_server():
+    CONTAINER_NAME = "server"
+    NETWORK_NAME = "server_network"
+
+    monitor_thread = threading.Thread(target=monitor_and_update, args=(CONTAINER_NAME, NETWORK_NAME), daemon=True)
+    monitor_thread.start()
+
     init_db()
     cleanup_thread = threading.Thread(target=cleanup_users, daemon=True)
     cleanup_thread.start()

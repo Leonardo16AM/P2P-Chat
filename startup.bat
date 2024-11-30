@@ -12,6 +12,13 @@ if %ERRORLEVEL% neq 0 (
     exit /b 1
 )
 
+echo Construyendo la imagen del router...
+docker build -t router-image -f Dockerfile.router .
+if %ERRORLEVEL% neq 0 (
+    echo Error al construir la imagen del router.
+    exit /b 1
+)
+
 echo Construyendo la imagen del servidor...
 docker build -t server-image -f Dockerfile.server .
 if %ERRORLEVEL% neq 0 (
@@ -26,12 +33,6 @@ if %ERRORLEVEL% neq 0 (
     exit /b 1
 )
 
-@REM echo Creando la red de Docker...
-@REM docker network create --subnet=192.168.1.0/24 chat_network
-@REM if %ERRORLEVEL% neq 0 (
-@REM     echo Error al crear la red de Docker. Es posible que ya exista.
-@REM )
-
 echo Levantando los contenedores con Docker Compose...
 docker-compose up -d
 if %ERRORLEVEL% neq 0 (
@@ -39,5 +40,5 @@ if %ERRORLEVEL% neq 0 (
     exit /b 1
 )
 
-echo RED MONTADA CON EXITO
+echo La red ha sido montada con exito.
 pause
