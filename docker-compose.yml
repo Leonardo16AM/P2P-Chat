@@ -116,8 +116,8 @@ services:
     image: coredns/coredns
     container_name: ddns
     volumes:
-      - ./Corefile:/Corefile
-      - ./db.server:/db.server
+      - ./ddns/Corefile:/Corefile
+      - ./ddns/db.server:/db.server
     ports:
       - "8053:53/udp"
     networks:
