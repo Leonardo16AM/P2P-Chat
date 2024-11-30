@@ -57,6 +57,24 @@ def find_gestor():
             logging.error(f"Error al buscar el gestor: {e}")
         return gestor_ip
 
+def is_server_active(host, port):
+    """
+    Verifica si el servidor está activo en la dirección y puerto especificados.
+
+    Args:
+        host (str): Dirección IP del servidor.
+        port (int): Puerto del servidor.
+
+    Returns:
+        bool: True si el servidor está activo, False de lo contrario.
+    """
+    try:
+        with socket.create_connection((host, port), timeout=5):
+            return True
+    except (socket.timeout, ConnectionRefusedError, OSError):
+        return False
+
+
 #region lock
 LOCK_FILE = 'client.lock'
 
@@ -135,22 +153,6 @@ def register(username, password, public_key_str):
         return {"status": "error", "message": f"Error de conexión: {str(e)}"}
 
 #region login
-# def login(username, password):
-#     try:
-#         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-#             s.connect((GESTOR_HOST, GESTOR_PORT))
-#             message = {
-#                 "action": "login",
-#                 "username": username,
-#                 "password": password
-#             }
-#             s.sendall(json.dumps(message).encode())
-#             response = s.recv(4096)
-#             response = json.loads(response.decode())
-#             return response
-#     except Exception as e:
-#         return {"status": "error", "message": f"Error de conexión: {str(e)}"}
-    
 def login(username, password):
     global DB_FILE
     try:
@@ -166,7 +168,6 @@ def login(username, password):
             response = json.loads(response.decode())
             
             if response.get("status") == "success":
-                # Cambiar la base de datos al usuario logueado
                 DB_FILE = get_user_db(username)
                 initialize_user_database(username)
             
@@ -177,17 +178,10 @@ def login(username, password):
     
     
 #region logout
-# def logout():
-#     """Gestiona el cierre de sesión."""
-#     stop_all_threads()  
-#     global username
-#     username = None
-#     print(col("Sesión cerrada correctamente.", 'green'))
-
 def logout():
     global DB_FILE
     stop_all_threads()  
-    DB_FILE = "client_data.db"  # Restaurar base de datos predeterminada
+    DB_FILE = "client_data.db"
     print(col("Sesión cerrada correctamente.", 'green'))
 
 
@@ -639,7 +633,11 @@ def main():
     global GESTOR_HOST, stop_event
 
     GESTOR_HOST = find_gestor()
-    print(col(f"Gestor encontrado en: {GESTOR_HOST}", 'green'))
+    
+    if is_server_active(GESTOR_HOST, GESTOR_PORT):
+        print(col("El servidor está activo.",'green'))
+    else:
+        print(col("El servidor no está activo.",'red'))
 
     private_key, public_key = load_or_generate_keys()
     public_key_str = public_key.public_bytes(
