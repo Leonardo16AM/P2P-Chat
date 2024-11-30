@@ -15,19 +15,9 @@ import sys
 
 BROADCAST_PORT = 55555  # Puerto para el broadcast
 BUFFER_SIZE = 1024      # Tamaño del buffer para recibir mensajes
-DB_FILE = "client_data.db"  
+DB_FILE = "client_data.db"  # Nombre del archivo de la base de datos
 CLIENT_PORT = 12345
-USER_DATA_PATH = "/app/user_data"
 
-
-GESTOR_HOST = '192.168.1.2' 
-GESTOR_PORT = 65432
-ALIVE_INTERVAL = 10  
-
-PRIVATE_KEY_FILE = 'private_key.pem'
-PUBLIC_KEY_FILE = 'public_key.pem'
-
-stop_event = threading.Event()
 
 logging.basicConfig(filename='client.log', level=logging.INFO, 
                     format='%(asctime)s - %(levelname)s - %(message)s')
@@ -36,8 +26,8 @@ logging.basicConfig(filename='client.log', level=logging.INFO,
 def find_gestor():
     """Descubre la dirección IP del gestor mediante broadcast."""
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP) as s:
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)  
-        s.settimeout(5) 
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)  # Activar modo broadcast
+        s.settimeout(5)  # Tiempo de espera por respuesta
 
         broadcast_message = b"DISCOVER_GESTOR"
         gestor_ip = None
@@ -56,7 +46,18 @@ def find_gestor():
             logging.error(f"Error al buscar el gestor: {e}")
         return gestor_ip
 
+
+# Configuración
+GESTOR_HOST = '192.168.1.2' 
+GESTOR_PORT = 65432
+ALIVE_INTERVAL = 10  
+
+# Rutas de almacenamiento de llaves
+PRIVATE_KEY_FILE = 'private_key.pem'
+PUBLIC_KEY_FILE = 'public_key.pem'
+
 #region lock
+
 LOCK_FILE = 'client.lock'
 
 def check_single_instance():
@@ -134,24 +135,7 @@ def register(username, password, public_key_str):
         return {"status": "error", "message": f"Error de conexión: {str(e)}"}
 
 #region login
-# def login(username, password):
-#     try:
-#         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-#             s.connect((GESTOR_HOST, GESTOR_PORT))
-#             message = {
-#                 "action": "login",
-#                 "username": username,
-#                 "password": password
-#             }
-#             s.sendall(json.dumps(message).encode())
-#             response = s.recv(4096)
-#             response = json.loads(response.decode())
-#             return response
-#     except Exception as e:
-#         return {"status": "error", "message": f"Error de conexión: {str(e)}"}
-    
 def login(username, password):
-    global DB_FILE
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.connect((GESTOR_HOST, GESTOR_PORT))
@@ -163,33 +147,22 @@ def login(username, password):
             s.sendall(json.dumps(message).encode())
             response = s.recv(4096)
             response = json.loads(response.decode())
-            
-            if response.get("status") == "success":
-                # Cambiar la base de datos al usuario logueado
-                DB_FILE = get_user_db(username)
-                initialize_user_database(username)
-            
             return response
     except Exception as e:
         return {"status": "error", "message": f"Error de conexión: {str(e)}"}
-
-    
     
 #region logout
-# def logout():
-#     """Gestiona el cierre de sesión."""
-#     stop_all_threads()  
-#     global username
-#     username = None
-#     print(col("Sesión cerrada correctamente.", 'green'))
 
 def logout():
-    global DB_FILE
-    stop_all_threads()  
-    DB_FILE = "client_data.db"  # Restaurar base de datos predeterminada
+    """Gestiona el cierre de sesión."""
+    stop_all_threads()  # Detener los hilos activos
+    global username
+    username = None
     print(col("Sesión cerrada correctamente.", 'green'))
 
 
+
+stop_event = threading.Event()
 
 def stop_all_threads():
     """Detiene todos los hilos en ejecución."""
@@ -198,7 +171,52 @@ def stop_all_threads():
 
 
 #region alive
-def send_alive_signal(username, public_key_str, stop_event):
+# def send_alive_signal(username, public_key_str):
+#     global GESTOR_HOST 
+#     while True:
+#         try:
+#             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+#                 s.connect((GESTOR_HOST, GESTOR_PORT))
+#                 message = {
+#                     "action": "alive_signal",
+#                     "username": username,
+#                     "public_key": public_key_str
+#                 }
+#                 s.sendall(json.dumps(message).encode())
+#                 response = s.recv(4096)
+#                 response = json.loads(response.decode())
+#                 if response.get("status") != "success":
+#                     print(f"Error en señal de vida: {response.get('message')}")
+#         except Exception as e:
+#             print(f"Error al enviar señal de vida: {str(e)}")
+#             while True:
+#                 gestor_ip = find_gestor()
+#                 if gestor_ip:
+#                     GESTOR_HOST = gestor_ip  
+#                     print(col(f"Nuevo gestor encontrado: {GESTOR_HOST}", 'green'))
+#                     break  
+#                 else:
+#                     print("Gestor no encontrado. Reintentando en 5 segundos...")
+#                     time.sleep(5)  
+#         time.sleep(ALIVE_INTERVAL)
+
+# def send_alive_signal(username, public_key_str):
+#     global GESTOR_HOST
+#     while not stop_event.is_set():
+#         try:
+#             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+#                 s.connect((GESTOR_HOST, GESTOR_PORT))
+#                 message = {
+#                     "action": "alive_signal",
+#                     "username": username,
+#                     "public_key": public_key_str
+#                 }
+#                 s.sendall(json.dumps(message).encode())
+#         except Exception as e:
+#             print(f"Error al enviar señal de vida: {str(e)}")
+#         time.sleep(ALIVE_INTERVAL)
+
+def send_alive_signal(username, public_key_str):
     global GESTOR_HOST
     while not stop_event.is_set():
         try:
@@ -210,24 +228,16 @@ def send_alive_signal(username, public_key_str, stop_event):
                     "public_key": public_key_str
                 }
                 s.sendall(json.dumps(message).encode())
-                response = s.recv(4096)
-                response = json.loads(response.decode())
-                if response.get("status") != "success":
-                    logging.error(f"Error en señal de vida: {response.get('message')}")
         except Exception as e:
-            print(f"Error al enviar señal de vida: {str(e)}")
-            while not stop_event.is_set():
-                gestor_ip = find_gestor()
-                if gestor_ip:
-                    GESTOR_HOST = gestor_ip  
-                    logging.info(col(f"Nuevo gestor encontrado: {GESTOR_HOST}", 'green'))
-                    break  
-                else:
-                    logging.error("Gestor no encontrado. Reintentando en 5 segundos...")
-                    if stop_event.wait(timeout=5):
-                        return  
-        if stop_event.wait(timeout=ALIVE_INTERVAL):
-            break
+            print(col(f"Error al enviar señal de vida: {str(e)}", 'red'))
+            # Si falla, reintentar localizar el gestor
+            GESTOR_HOST = find_gestor()
+            if not GESTOR_HOST:
+                print(col("No se encontró gestor, reintentando en 5 segundos.", 'red'))
+                time.sleep(5)
+        time.sleep(ALIVE_INTERVAL)
+
+
 
 
 #region user_query
@@ -249,90 +259,47 @@ def query_user_info(username, target_username):
     
 # region database
     
-# def initialize_database():
-#     """Crea la base de datos SQLite y las tablas necesarias."""
-#     conn = sqlite3.connect(DB_FILE)
-#     cursor = conn.cursor()
-
-#     # Tabla para almacenar usuarios
-#     cursor.execute('''
-#         CREATE TABLE IF NOT EXISTS users (
-#             id INTEGER PRIMARY KEY AUTOINCREMENT,
-#             username TEXT UNIQUE NOT NULL,
-#             public_key TEXT NOT NULL
-#         );
-#     ''')    
-    
-#     # Tabla para almacenar mensajes
-#     cursor.execute('''
-#         CREATE TABLE IF NOT EXISTS messages (
-#         id INTEGER PRIMARY KEY AUTOINCREMENT,
-#         chat_id INTEGER NOT NULL,     -- Relación con el chat
-#         sender TEXT NOT NULL,         -- Quién envió el mensaje (yo o el usuario remoto)
-#         message TEXT NOT NULL,        -- Contenido del mensaje
-#         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-#         delivered INTEGER DEFAULT 0,  -- 0 = No entregado, 1 = Entregado
-#         FOREIGN KEY(chat_id) REFERENCES chats(id) ON DELETE CASCADE
-#     );
-#     ''')
-    
-#     # Tabla para almacenar historial de chats (si es necesario)
-#     cursor.execute('''
-#         CREATE TABLE IF NOT EXISTS chats (
-#         id INTEGER PRIMARY KEY AUTOINCREMENT,
-#         username TEXT NOT NULL,       -- Usuario remoto
-#         last_message TEXT,            -- Último mensaje del chat
-#         last_timestamp DATETIME,      -- Timestamp del último mensaje
-#         UNIQUE(username)              -- Un chat por usuario
-#     );
-#     ''')
-    
-#     conn.commit()
-#     conn.close()
-#     print("Base de datos inicializada correctamente.")
-
-def get_user_db(username):
-    """Devuelve la ruta de la base de datos específica para un usuario."""
-    if not os.path.exists(USER_DATA_PATH):
-        os.makedirs(USER_DATA_PATH)  # Crear el directorio si no existe
-    return os.path.join(USER_DATA_PATH, f"{username}_data.db")
-
-
-
-def initialize_user_database(username):
-    """Inicializa la base de datos SQLite para un usuario específico."""
-    db_file = get_user_db(username)
-    conn = sqlite3.connect(db_file)
+def initialize_database():
+    """Crea la base de datos SQLite y las tablas necesarias."""
+    conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
 
+    # Tabla para almacenar usuarios
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            public_key TEXT NOT NULL
+        );
+    ''')    
+    
     # Tabla para almacenar mensajes
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS messages (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            chat_id INTEGER NOT NULL,
-            sender TEXT NOT NULL,
-            message TEXT NOT NULL,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-            delivered INTEGER DEFAULT 0,
-            FOREIGN KEY(chat_id) REFERENCES chats(id) ON DELETE CASCADE
-        );
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        chat_id INTEGER NOT NULL,     -- Relación con el chat
+        sender TEXT NOT NULL,         -- Quién envió el mensaje (yo o el usuario remoto)
+        message TEXT NOT NULL,        -- Contenido del mensaje
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+        delivered INTEGER DEFAULT 0,  -- 0 = No entregado, 1 = Entregado
+        FOREIGN KEY(chat_id) REFERENCES chats(id) ON DELETE CASCADE
+    );
     ''')
-
-    # Tabla para almacenar chats
+    
+    # Tabla para almacenar historial de chats (si es necesario)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS chats (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT NOT NULL,
-            last_message TEXT,
-            last_timestamp DATETIME,
-            UNIQUE(username)
-        );
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT NOT NULL,       -- Usuario remoto
+        last_message TEXT,            -- Último mensaje del chat
+        last_timestamp DATETIME,      -- Timestamp del último mensaje
+        UNIQUE(username)              -- Un chat por usuario
+    );
     ''')
-
+    
     conn.commit()
     conn.close()
-    print(f"Base de datos inicializada para el usuario '{username}'.")
-
+    print("Base de datos inicializada correctamente.")
 
 # region chat
 
@@ -367,6 +334,7 @@ def save_message(chat_id, sender, message, delivered=False):
     
     conn.commit()
     conn.close()
+
     
 def get_chat_messages(chat_id):
     """Obtiene los mensajes de un chat."""
@@ -539,6 +507,7 @@ def send_message(username):
 
 
 
+
 # def start_message_listener(username):
 #     """Inicia un servidor para recibir mensajes de otros usuarios."""
 #     def listen():
@@ -633,6 +602,7 @@ def start_message_listener(username):
 
 
 
+
 #region main
 def main():
     global GESTOR_HOST, stop_event
@@ -649,84 +619,78 @@ def main():
     print(col("Bienvenido al Cliente de Chat P2P", 'blue'))
     while True:
         print("\nSelecciona una opción:")
-        print("\t1. Registrarse")
-        print("\t2. Iniciar Sesión")
-        print("\t3. Salir")
+        print("1. Registrarse")
+        print("2. Iniciar Sesión")
+        print("3. Salir")
         choice = input("Opción: ")
 
         if choice == "1":
-            username = input(col("\tNombre de usuario: ", 'blue'))
-            password = getpass(col("\tContraseña: ", 'blue'))
-            confirm_password = getpass(col("\tConfirmar Contraseña: ", 'blue'))
+            username = input("Nombre de usuario: ")
+            password = getpass("Contraseña: ")
+            confirm_password = getpass("Confirmar Contraseña: ")
             if password != confirm_password:
-                print(col("Las contraseñas no coinciden. Intenta nuevamente.", 'red'))
+                print("Las contraseñas no coinciden. Intenta nuevamente.")
                 continue
             response = register(username, password, public_key_str)
             print(response.get("message"))
             if response.get("status") == "success":
-                print(col("Puedes ahora iniciar sesión.", 'green'))
-            print("")
+                print("Puedes ahora iniciar sesión.")
         elif choice == "2":
-            username = input(col("\tNombre de usuario: ", 'blue'))
-            password = getpass(col("\tContraseña: ", 'blue'))
+            # Iniciar sesión
+            username = input("Nombre de usuario: ")
+            password = getpass("Contraseña: ")
             response = login(username, password)
             print(response.get("message"))
             if response.get("status") == "success":
-                stop_event.clear()  
+                stop_event.clear()  # Reinicia el evento de hilos
                 review_pending_messages()
                 start_message_listener(username)
 
-                alive_thread = threading.Thread(
-                    target=send_alive_signal, 
-                    args=(username, public_key_str, stop_event), 
-                    daemon=True
-                )
+                alive_thread = threading.Thread(target=send_alive_signal, args=(username, public_key_str), daemon=True)
                 alive_thread.start()
 
                 while True:
                     print("\nOpciones disponibles:")
-                    print("\t1. Consultar usuario")
-                    print("\t2. Enviar mensaje")
-                    print("\t3. Ver chats")
-                    print("\t4. Abrir un chat")
-                    print("\t5. Cerrar sesión")
+                    print("1. Consultar usuario")
+                    print("2. Enviar mensaje")
+                    print("3. Ver chats")
+                    print("4. Abrir un chat")
+                    print("5. Cerrar sesión")
                     sub_choice = input("Opción: ")
 
                     if sub_choice == "1":
-                        target_username = input("\tNombre de usuario a consultar: ")
+                        # Consulta de usuario
+                        target_username = input("Nombre de usuario a consultar: ")
                         response = query_user_info(username, target_username)
                         if response.get("status") == "success":
-                            print(col(f"{response.get('ip')}",'magenta'))
-                            # print(f"Llave Pública:\n{response.get('public_key')}")
+                            print(f"IP: {response.get('ip')}")
+                            print(f"Llave Pública:\n{response.get('public_key')}")
                         else:
-                            print(col(f"Error: {response.get('message')}", 'red'))
+                            print(f"Error: {response.get('message')}")
                     elif sub_choice == "2":
+                        # Enviar mensaje
                         send_message(username)
                     elif sub_choice == "3":
                         show_chats()
                     elif sub_choice == "4":
                         open_chat()
                     elif sub_choice == "5":
+                        # Cerrar sesión
                         print("Cerrando sesión...")
-                        stop_event.set()       
-                        alive_thread.join()   
                         break
                     else:
-                        print(col("Opción no válida. Intenta nuevamente.", 'red'))
-                print("")
+                        print("Opción no válida. Intenta nuevamente.")
 
         elif choice == "3":
             print("Saliendo del cliente. ¡Hasta luego!")
-            print("")
             break
         else:
-            print(col("Opción no válida. Intenta nuevamente.",'red'))
-            print("")
-
+            print("Opción no válida. Intenta nuevamente.")
 
 if __name__ == "__main__":
     check_single_instance()
     try:
+        initialize_database()
         main()
     finally:
         remove_lock()

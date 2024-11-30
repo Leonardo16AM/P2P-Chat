@@ -1,5 +1,9 @@
 version: '3.8'
 
+volumes:
+  user_data:  # Volumen para almacenar las bases de datos de los usuarios
+    driver: local
+
 networks:
   chat_network:
     driver: bridge
@@ -20,6 +24,8 @@ services:
   client1:
     image: client-image
     container_name: client1
+    volumes:
+      - user_data:/app/user_data
     networks:
       chat_network:
         ipv4_address: 192.168.1.3
@@ -29,6 +35,8 @@ services:
   client2:
     image: client-image
     container_name: client2
+    volumes:
+      - user_data:/app/user_data
     networks:
       chat_network:
         ipv4_address: 192.168.1.4
@@ -38,6 +46,8 @@ services:
   client3:
     image: client-image
     container_name: client3
+    volumes:
+      - user_data:/app/user_data
     networks:
       chat_network:
         ipv4_address: 192.168.1.5
