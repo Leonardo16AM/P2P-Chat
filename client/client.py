@@ -12,7 +12,7 @@ from termcolor import colored as col
 import sqlite3
 import sys
 
-
+SERVER_UP=True
 BROADCAST_PORT = 55555
 BUFFER_SIZE = 1024
 DB_FILE = "client_data.db"
@@ -189,9 +189,11 @@ def stop_all_threads():
     print(col("Hilos detenidos.", "yellow"))
 
 
-# region alive
+# region alive# region alive
 def send_alive_signal(username, public_key_str, stop_event):
     global GESTOR_HOST
+    global SERVER_UP 
+
     while not stop_event.is_set():
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -204,20 +206,26 @@ def send_alive_signal(username, public_key_str, stop_event):
                 s.sendall(json.dumps(message).encode())
                 response = s.recv(4096)
                 response = json.loads(response.decode())
-                if response.get("status") != "success":
-                    logging.error(f"Error en señal de vida: {response.get('message')}")
-        except Exception as e:
-            logging.error(f"Error al enviar señal de vida: {str(e)}")
-            while not stop_event.is_set():
-                gestor_ip = find_gestor()
-                if gestor_ip:
-                    GESTOR_HOST = gestor_ip
-                    logging.info(f"Nuevo gestor encontrado: {GESTOR_HOST}")
-                    break
+
+                if response.get("status") == "success":
+                    SERVER_UP = True
+                    logging.info("Señal de vida enviada exitosamente.")
                 else:
-                    logging.error("Gestor no encontrado. Reintentando en 5 segundos...")
-                    if stop_event.wait(timeout=5):
-                        return
+                    SERVER_UP = False
+                    logging.error(f"Error en señal de vida: {response.get('message')}")
+
+        except Exception as e:
+            SERVER_UP = False
+            logging.error(f"Error al enviar señal de vida: {str(e)}")
+
+            gestor_ip = find_gestor()
+            if gestor_ip:
+                GESTOR_HOST = gestor_ip
+                SERVER_UP = True
+                logging.info(f"Nuevo gestor encontrado: {GESTOR_HOST}")
+            else:
+                logging.error("Gestor no encontrado. SERVER_UP establecido a False.")
+
         if stop_event.wait(timeout=ALIVE_INTERVAL):
             break
 
@@ -578,6 +586,7 @@ def main():
     if is_server_active(GESTOR_HOST, GESTOR_PORT):
         print(col("El servidor está activo.", "green"))
     else:
+        SERVER_UP = False
         print(col("El servidor no está activo.", "red"))
 
     private_key, public_key = load_or_generate_keys()
