@@ -12,7 +12,7 @@ from termcolor import colored as col
 import sqlite3
 import sys
 
-SERVER_UP=True
+SERVER_UP = True
 BROADCAST_PORT = 55555
 BUFFER_SIZE = 1024
 DB_FILE = "client_data.db"
@@ -192,7 +192,7 @@ def stop_all_threads():
 # region alive# region alive
 def send_alive_signal(username, public_key_str, stop_event):
     global GESTOR_HOST
-    global SERVER_UP 
+    global SERVER_UP
 
     while not stop_event.is_set():
         try:
@@ -290,6 +290,18 @@ def initialize_user_database(username):
             UNIQUE(username)
         );
     """
+    )
+
+    # Tabla para almacenar mensajes pendientes
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS pending_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sender TEXT NOT NULL,
+            receiver TEXT NOT NULL,
+            message TEXT NOT NULL,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        );"""
     )
 
     conn.commit()
@@ -505,16 +517,64 @@ def send_message(username):
 
                 save_message(chat_id, username, message_content, delivered=True)
         except Exception as e:
-            print(col(f"Error al enviar el mensaje: {str(e)}", "red"))
-
-            save_message(chat_id, username, message_content, delivered=False)
+            print(
+                col(
+                    f"Error al enviar el mensaje. Guardando como pendiente: {str(e)}",
+                    "yellow",
+                )
+            )
+            store_pending_message(username, target_username, message_content)
     else:
         print(
             col(
-                f"Error al obtener información del usuario: {response.get('message')}",
-                "red",
+                f"El usuario {target_username} está desconectado o no está registrado.",
+                "yellow",
             )
         )
+        store_pending_message(username, target_username, message_content)
+
+        # ------------------------------------------------------------------------------------------------------
+
+
+# def send_message(username):
+#     """Envía un mensaje o lo guarda como pendiente si el usuario está desconectado."""
+#     target_username = input("Usuario destino: ")
+#     message_content = input("Mensaje: ")
+
+#     response = query_user_info(username, target_username)
+#     if response.get("status") == "success":
+#         target_ip = response.get("ip")
+#         try:
+#             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
+#                 client_socket.connect((target_ip, CLIENT_PORT))
+#                 message = {
+#                     "sender": username,
+#                     "content": message_content,
+#                 }
+#                 client_socket.sendall(json.dumps(message).encode())
+#                 print(col("Mensaje enviado con éxito.", "green"))
+#         except Exception as e:
+#             print(col(f"Error al enviar el mensaje. Guardando como pendiente: {str(e)}", "yellow"))
+#             store_pending_message(username, target_username, message_content)
+#     else:
+#         print(col(f"El usuario {target_username} está desconectado o no está registrado.", "yellow"))
+#         store_pending_message(username, target_username, message_content)
+
+
+def store_pending_message(sender, receiver, content):
+    """Guarda un mensaje pendiente en la base de datos."""
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        INSERT INTO pending_messages (sender, receiver, message, timestamp)
+        VALUES (?, ?, ?, datetime('now'))
+    """,
+        (sender, receiver, content),
+    )
+    conn.commit()
+    conn.close()
+    print(col(f"Mensaje pendiente almacenado para {receiver}.", "yellow"))
 
 
 listener_thread = None
@@ -549,7 +609,7 @@ def start_message_listener(username):
                         content = message_json.get("content")
 
                         if not sender or not content:
-                            print(col(f"Mensaje inválido recibido de {addr[0]}", "red"))
+                            # print(col(f"Mensaje inválido recibido de {addr[0]}", "red"))
                             continue
 
                         print(col(f"Nuevo mensaje de {sender}: {content}", "cyan"))
@@ -575,6 +635,129 @@ def start_message_listener(username):
 
     listener_thread = threading.Thread(target=listen, daemon=True)
     listener_thread.start()
+
+
+def start_pending_message_worker(username):
+    """Inicia un hilo en segundo plano para intentar entregar mensajes pendientes."""
+
+    def worker():
+        while not stop_event.is_set():
+            check_and_send_pending_messages(username)
+            time.sleep(5)  # Intervalo de 5 segundos entre verificaciones
+
+    thread = threading.Thread(target=worker, daemon=True)
+    thread.start()
+
+
+def check_and_send_pending_messages(username):
+    """Revisa y envía mensajes pendientes."""
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+
+    # Obtener mensajes pendientes
+    cursor.execute(
+        """
+        SELECT id, receiver, message FROM pending_messages
+    """
+    )
+    pending_messages = cursor.fetchall()
+
+    for msg_id, receiver, message_content in pending_messages:
+        target_ip = get_cached_ip(receiver)
+
+        # Intentar enviar el mensaje con el servidor activo
+        if SERVER_UP:
+            response = query_user_info(username, receiver)
+            if response.get("status") == "success":
+                target_ip = response.get("ip")
+                update_cached_ip(receiver, target_ip)  # Actualizar la IP cacheada
+                if send_message_to_ip(target_ip, username, receiver, message_content):
+                    cursor.execute(
+                        "DELETE FROM pending_messages WHERE id = ?", (msg_id,)
+                    )
+                    conn.commit()
+                    save_message_to_chat(receiver, username, message_content)
+                continue
+            else:
+                logging.warning(
+                    f"El usuario {receiver} no está conectado. {response.get('message')}"
+                )
+
+        # Si el servidor no está activo, usar la IP cacheada
+        elif target_ip:
+            logging.info(f"Intentando usar la IP cacheada para {receiver}: {target_ip}")
+            if send_message_to_ip(target_ip, username, receiver, message_content):
+                cursor.execute("DELETE FROM pending_messages WHERE id = ?", (msg_id,))
+                conn.commit()
+                save_message_to_chat(receiver, username, message_content)
+            else:
+                logging.warning(
+                    f"No se pudo entregar el mensaje a {receiver} en {target_ip}."
+                )
+        else:
+            logging.warning(f"No hay IP cacheada para {receiver}.")
+
+    conn.close()
+
+
+def send_message_to_ip(ip, sender, receiver, message_content):
+    """Intenta conectar y enviar un mensaje al destinatario en una IP específica."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
+            client_socket.settimeout(5)  # Timeout para conexiones
+            client_socket.connect((ip, CLIENT_PORT))
+            message = {
+                "sender": sender,
+                "content": message_content,
+            }
+            client_socket.sendall(json.dumps(message).encode())
+            print(col(f"Mensaje entregado a {receiver}: {message_content}", "green"))
+            return True
+    except (socket.timeout, ConnectionRefusedError, OSError) as e:
+        logging.error(f"Error al intentar conectar con {receiver} en {ip}: {str(e)}")
+    return False
+
+
+def save_message_to_chat(receiver, sender, message_content):
+    """Guarda un mensaje entregado en la tabla de mensajes y actualiza el chat."""
+    chat_id = get_or_create_chat(receiver)
+    save_message(chat_id, sender, message_content, delivered=True)
+
+
+def try_connect_and_send(target_ip, sender, receiver, message_content):
+    """Intenta conectar y enviar un mensaje al destinatario."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
+            client_socket.settimeout(5)  # Timeout para conexiones
+            client_socket.connect((target_ip, CLIENT_PORT))
+            message = {
+                "sender": sender,
+                "content": message_content,
+            }
+            client_socket.sendall(json.dumps(message).encode())
+            print(col(f"Mensaje entregado a {receiver}: {message_content}", "green"))
+            return True
+    except socket.timeout:
+        print(
+            col(f"Timeout al intentar conectar con {receiver} en {target_ip}.", "red")
+        )
+    except Exception as e:
+        print(col(f"Error al intentar conectar con {receiver}: {str(e)}", "red"))
+    return False
+
+
+cache = {}
+
+
+def get_cached_ip(username):
+    """Obtiene la IP cacheada de un usuario."""
+    return cache.get(username)
+
+
+def update_cached_ip(username, ip):
+    """Actualiza la IP cacheada de un usuario."""
+    cache[username] = ip
+    print(col(f"IP cacheada para {username} actualizada a {ip}.", "blue"))
 
 
 # region main
@@ -621,9 +804,17 @@ def main():
             response = login(username, password)
             print(response.get("message"))
             if response.get("status") == "success":
+                # stop_event.clear()
+                # review_pending_messages()
+                # start_message_listener(username)
                 stop_event.clear()
-                review_pending_messages()
                 start_message_listener(username)
+                start_pending_message_worker(username)
+
+                # subscribe_thread = threading.Thread(
+                #     target=subscribe_to_notifications, args=(username,), daemon=True
+                # )
+                # subscribe_thread.start()
 
                 alive_thread = threading.Thread(
                     target=send_alive_signal,
