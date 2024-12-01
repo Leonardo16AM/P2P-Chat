@@ -1,44 +1,56 @@
 @echo off
+set /p choice="Presiona Enter para solo copiar archivos y reiniciar contenedores, o escribe 'build' para un build completo: "
 
-where docker >nul 2>nul
-if %ERRORLEVEL% neq 0 (
-    echo Docker no está instalado. Por favor, instálalo antes de continuar.
-    exit /b 1
+if "%choice%"=="" (
+    echo Reiniciando completamente los contenedores...
+    docker stop client1 client2 client3 server router
+    docker rm client1 client2 client3 server router
+
+    echo Copiando archivos actualizados...
+    docker cp ./client client1:/app
+    docker cp ./client client2:/app
+    docker cp ./client client3:/app
+    docker cp ./server server:/app
+
+    echo Levantando contenedores...
+    docker-compose up -d
+    echo Contenedores actualizados y reiniciados correctamente.
+    exit /b
 )
 
-where docker-compose >nul 2>nul
-if %ERRORLEVEL% neq 0 (
-    echo Docker Compose no está instalado. Por favor, instálalo antes de continuar.
-    exit /b 1
+if "%choice%"=="build" (
+    echo Realizando build completo...
+    docker stop client1 client2 client3 server router
+    docker rm client1 client2 client3 server router
+
+    docker build -t router-image -f Dockerfile.router .
+    if %ERRORLEVEL% neq 0 (
+        echo Error al construir la imagen del router.
+        exit /b 1
+    )
+
+    docker build -t server-image -f Dockerfile.server .
+    if %ERRORLEVEL% neq 0 (
+        echo Error al construir la imagen del servidor.
+        exit /b 1
+    )
+
+    docker build -t client-image -f Dockerfile.client .
+    if %ERRORLEVEL% neq 0 (
+        echo Error al construir la imagen del cliente.
+        exit /b 1
+    )
+
+    docker-compose up -d --build
+    if %ERRORLEVEL% neq 0 (
+        echo Error al levantar los contenedores con Docker Compose.
+        exit /b 1
+    )
+
+    echo Build completo realizado y red levantada con exito.
+    pause
+    exit /b
 )
 
-echo Construyendo la imagen del router...
-docker build -t router-image -f Dockerfile.router .
-if %ERRORLEVEL% neq 0 (
-    echo Error al construir la imagen del router.
-    exit /b 1
-)
-
-echo Construyendo la imagen del servidor...
-docker build -t server-image -f Dockerfile.server .
-if %ERRORLEVEL% neq 0 (
-    echo Error al construir la imagen del servidor.
-    exit /b 1
-)
-
-echo Construyendo la imagen del cliente...
-docker build -t client-image -f Dockerfile.client .
-if %ERRORLEVEL% neq 0 (
-    echo Error al construir la imagen del cliente.
-    exit /b 1
-)
-
-echo Levantando los contenedores con Docker Compose...
-docker-compose up -d
-if %ERRORLEVEL% neq 0 (
-    echo Error al levantar los contenedores con Docker Compose.
-    exit /b 1
-)
-
-echo La red ha sido montada con exito.
+echo Opcion invalida. Por favor, intentalo nuevamente.
 pause

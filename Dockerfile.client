@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+FROM python:3.12-slim AS base
 
 RUN apt-get update && apt-get install -y \
     vim \
@@ -8,17 +8,16 @@ RUN apt-get update && apt-get install -y \
     gcc \
     build-essential \
     iputils-ping \
-    iproute2 \ 
-    && rm -rf /var/lib/apt/lists/*
-
+    iproute2 && \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-
-COPY ./client /app
-
+COPY ./client/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
+FROM base AS runtime
+WORKDIR /app
+COPY ./client /app
 RUN chmod +x ./startup.sh
 
 CMD ["sh", "-c", "/app/startup.sh && tail -f /dev/null"]
-

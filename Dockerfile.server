@@ -1,23 +1,23 @@
-FROM python:3.12-slim
+FROM python:3.12-slim AS base
 
 RUN apt-get update && apt-get install -y \
     vim \
     net-tools \
-    sqlite3\
+    sqlite3 \
     libsqlite3-dev \
     gcc \
-    build-essential\ 
+    build-essential \
     iputils-ping \
-    iproute2 \ 
-    && rm -rf /var/lib/apt/lists/*
+    iproute2 && \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-
-COPY ./server /app
-
+COPY ./server/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# CMD ["sh", "-c", "python3 locator.py & python3 gestor.py & wait"]
-# CMD ["python3","gestor.py"]
+FROM base AS runtime
+WORKDIR /app
+COPY ./server /app
+RUN chmod +x ./startup.sh
 
 CMD ["sh", "-c", "/app/startup.sh & python3 gestor.py & wait"]

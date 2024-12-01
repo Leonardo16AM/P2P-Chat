@@ -372,13 +372,13 @@ def cleanup_users():
 
 # region startup
 def start_server():
-    CONTAINER_NAME = "server"
-    NETWORK_NAME = "server_network"
-
-    monitor_thread = threading.Thread(
-        target=monitor_and_update, args=(CONTAINER_NAME, NETWORK_NAME), daemon=True
-    )
-    monitor_thread.start()
+    
+    # CONTAINER_NAME = "server"
+    # NETWORK_NAME = "server_network"
+    # monitor_thread = threading.Thread(
+    #     target=monitor_and_update, args=(CONTAINER_NAME, NETWORK_NAME), daemon=True
+    # )
+    # monitor_thread.start()
 
     init_db()
     cleanup_thread = threading.Thread(target=cleanup_users, daemon=True)

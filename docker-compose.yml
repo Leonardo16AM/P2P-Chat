@@ -20,8 +20,6 @@ services:
   router:
     image: router-image
     container_name: router
-    # depends_on:
-    #   - ddns
     networks:
       server_network:
         ipv4_address: 192.168.1.100
@@ -40,8 +38,6 @@ services:
   server:
     image: server-image
     container_name: server
-    # depends_on:
-    #   - ddns
     networks:
       server_network:
         ipv4_address: 192.168.1.2
@@ -56,8 +52,6 @@ services:
   client1:
     image: client-image
     container_name: client1
-    # depends_on:
-    #   - ddns
     volumes:
       - user_data:/app/user_data
     networks:
@@ -76,8 +70,6 @@ services:
   client2:
     image: client-image
     container_name: client2
-    # depends_on:
-    #   - ddns
     volumes:
       - user_data:/app/user_data
     networks:
@@ -96,8 +88,6 @@ services:
   client3:
     image: client-image
     container_name: client3
-    # depends_on:
-    #   - ddns
     volumes:
       - user_data:/app/user_data
     networks:
@@ -112,19 +102,3 @@ services:
     privileged: true
     cap_add:
       - NET_ADMIN
-  # ddns:
-  #   image: coredns/coredns
-  #   container_name: ddns
-  #   volumes:
-  #     - ./ddns/Corefile:/Corefile
-  #     - ./ddns/db.server:/db.server
-  #   ports:
-  #     - "8053:53/udp"
-  #   networks:
-  #     server_network:
-  #       ipv4_address: 192.168.1.10
-  #   stdin_open: true
-  #   tty: true
-  #   privileged: true
-  #   cap_add:
-  #     - NET_ADMIN
