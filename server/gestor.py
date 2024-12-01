@@ -120,6 +120,9 @@ def monitor_and_update(container_name, network_name):
 
 # region db_init
 def init_db():
+    """
+    Inicializa la base de datos para la aplicación de gestión de chat.
+    """
     conn = sqlite3.connect("chat_manager.db")
     cursor = conn.cursor()
     cursor.execute(
@@ -132,7 +135,7 @@ def init_db():
             last_seen TIMESTAMP NOT NULL,
             status TEXT NOT NULL DEFAULT 'disconnected'
         )
-    """
+        """
     )
     conn.commit()
     conn.close()
@@ -146,6 +149,9 @@ def log_message(message):
 
 # region utils
 def handle_client(conn, addr):
+    """
+    Maneja la comunicación con un cliente conectado.
+    """
     log_message(f">> Conexión establecida desde {addr}")
     try:
         while True:
@@ -168,6 +174,9 @@ def handle_client(conn, addr):
 
 
 def process_message(message, addr):
+    """
+    Procesa un mensaje entrante y realiza la acción correspondiente.
+    """
     log_message(f"\tProcesando mensaje desde {addr}: {message}")
     action = message.get("action")
     if action == "register":
@@ -185,6 +194,9 @@ def process_message(message, addr):
 
 # region register
 def register_user(message):
+    """
+    Registra un nuevo usuario en el sistema.
+    """
     username = message.get("username")
     password = message.get("password")
     public_key = message.get("public_key")
@@ -219,7 +231,11 @@ def register_user(message):
 
 # region login
 
+
 def login_user(message, addr):
+    """
+    Maneja el inicio de sesión del usuario verificando las credenciales y actualizando el estado del usuario.
+    """
     username = message.get("username")
     password = message.get("password")
 
@@ -266,6 +282,9 @@ def login_user(message, addr):
 
 # region alive
 def alive_signal(message, addr):
+    """
+    Maneja la señal de vida de un cliente, actualizando el estado del usuario en la base de datos.
+    """
     username = message.get("username")
     public_key = message.get("public_key")
 
@@ -305,6 +324,9 @@ def alive_signal(message, addr):
 
 # region user_info
 def get_user_info(message):
+    """
+    Recupera información del usuario basada en el mensaje proporcionado.
+    """
     requester = message.get("username")
     target = message.get("target_username")
 
@@ -348,6 +370,14 @@ def get_user_info(message):
 
 # region disconect
 def cleanup_users():
+    """
+    Actualiza periódicamente el estado de los usuarios inactivos en la base de datos a 'disconnected'.
+
+    Esta función ejecuta un bucle infinito donde se conecta a la base de datos SQLite,
+    verifica los usuarios que han estado inactivos por un tiempo mayor al especificado en TIMEOUT,
+    y actualiza su estado a 'disconnected'. Registra el número de usuarios actualizados y
+    maneja cualquier excepción que ocurra durante el proceso.
+    """
     while True:
         try:
             conn = sqlite3.connect("chat_manager.db")
@@ -372,7 +402,17 @@ def cleanup_users():
 
 # region startup
 def start_server():
-    
+    """
+    Inicializa y arranca el servidor.
+    Esta función realiza los siguientes pasos:
+    1. Inicializa la base de datos llamando a `init_db()`.
+    2. Inicia un hilo en segundo plano para limpiar usuarios llamando a `cleanup_users()`.
+    3. Crea un socket, lo enlaza al host y puerto especificados, y comienza a escuchar conexiones entrantes.
+    4. Para cada conexión entrante, inicia un nuevo hilo para manejar al cliente.
+    Nota:
+        El servidor se ejecuta indefinidamente, aceptando y manejando conexiones de clientes en hilos separados.
+    """
+
     # CONTAINER_NAME = "server"
     # NETWORK_NAME = "server_network"
     # monitor_thread = threading.Thread(
