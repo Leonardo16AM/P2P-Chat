@@ -22,7 +22,7 @@ USER_DATA_PATH = "/app/user_data"
 
 GESTOR_HOST = "192.168.1.2"
 GESTOR_PORT = 65432
-ALIVE_INTERVAL = 10
+ALIVE_INTERVAL = 1
 
 PRIVATE_KEY_FILE = "private_key.pem"
 PUBLIC_KEY_FILE = "public_key.pem"

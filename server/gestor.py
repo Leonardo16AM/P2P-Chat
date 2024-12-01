@@ -12,8 +12,8 @@ import subprocess
 # region config
 HOST = "0.0.0.0"  # Escuchar en todas las interfaces
 PORT = 65432  # Puerto a usar
-ALIVE_INTERVAL = 10  # Intervalo de alive_signal en segundos
-TIMEOUT = 60  # Tiempo antes de considerar a un usuario como desconectado
+ALIVE_INTERVAL = 1  # Intervalo de alive_signal en segundos
+TIMEOUT = 5  # Tiempo antes de considerar a un usuario como desconectado
 LOG_FILE = "gestor.log"
 
 # region lock
