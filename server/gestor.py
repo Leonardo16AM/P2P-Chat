@@ -218,6 +218,7 @@ def register_user(message):
 
 
 # region login
+
 def login_user(message, addr):
     username = message.get("username")
     password = message.get("password")
@@ -231,6 +232,14 @@ def login_user(message, addr):
     try:
         conn = sqlite3.connect("chat_manager.db")
         cursor = conn.cursor()
+
+        cursor.execute("SELECT status FROM users WHERE username = ?", (username,))
+        status_row = cursor.fetchone()
+        if status_row and status_row[0] == "connected":
+            conn.close()
+            log_message(f"\tError: El usuario {username} ya está conectado.")
+            return {"status": "error", "message": "El usuario ya está conectado."}
+
         cursor.execute("SELECT password FROM users WHERE username = ?", (username,))
         row = cursor.fetchone()
         if row and bcrypt.checkpw(password.encode(), row[0]):
