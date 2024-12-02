@@ -73,7 +73,7 @@ def is_server_active(host, port):
         bool: True si el servidor está activo, False de lo contrario.
     """
     try:
-        with socket.create_connection((host, port), timeout=5):
+        with socket.create_connection((host, port), timeout=1):
             return True
     except (socket.timeout, ConnectionRefusedError, OSError):
         return False
@@ -189,13 +189,11 @@ def logout():
     global DB_FILE
     stop_all_threads()
     DB_FILE = "client_data.db"
-    print(col("Sesión cerrada correctamente.", "green"))
 
 
 def stop_all_threads():
     """Detiene todos los hilos en ejecución."""
     stop_event.set()
-    print(col("Hilos detenidos.", "yellow"))
 
 
 # region alive
@@ -216,6 +214,7 @@ def send_alive_signal(username, public_key_str, stop_event):
     while not stop_event.is_set():
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(1) 
                 s.connect((GESTOR_HOST, GESTOR_PORT))
                 message = {
                     "action": "alive_signal",
@@ -233,6 +232,9 @@ def send_alive_signal(username, public_key_str, stop_event):
                     SERVER_UP = False
                     logging.error(f"Error en señal de vida: {response.get('message')}")
 
+        except socket.timeout:
+            logging.warning("Operación de socket agotó el tiempo de espera.")
+            SERVER_UP = False
         except Exception as e:
             SERVER_UP = False
             logging.error(f"Error al enviar señal de vida: {str(e)}")
@@ -247,6 +249,8 @@ def send_alive_signal(username, public_key_str, stop_event):
 
         if stop_event.wait(timeout=ALIVE_INTERVAL):
             break
+
+    logging.info("Hilo send_alive_signal finalizado.")
 
 
 # region user_query
@@ -265,7 +269,7 @@ def query_user_info(username, target_username):
 
             if response.get("status") == "success":
                 target_ip = response.get("ip")
-                update_cached_ip(target_username, target_ip)  # Actualizar la caché
+                update_cached_ip(target_username, target_ip) 
             return response
     except Exception as e:
         print(col(f"Error al consultar información del servidor: {str(e)}", "red"))
@@ -457,77 +461,48 @@ def open_chat():
     except ValueError:
         print(col("ID del chat no válido.", "red"))
 
-
-# def send_message(username):
-#     """Envía un mensaje o lo guarda como pendiente si no puede entregarlo."""
-#     target_username = input("Usuario destino: ")
-#     message_content = input("Mensaje: ")
-
-#     # Intentar obtener la IP desde el gestor
-#     response = query_user_info(username, target_username)
-#     if response.get("status") == "success":
-#         target_ip = response.get("ip")
-#         update_cached_ip(target_username, target_ip)  # Actualizar cache
-#         success = send_message_to_ip(target_ip, username, target_username, message_content)
-#         if success:
-#             return  # Mensaje entregado con éxito
-#     else:
-#         print(col(f"No se pudo obtener información de {target_username} del gestor.", "yellow"))
-
-#     # Si no se logró, intentar con IP cacheada
-#     cached_ip = get_cached_ip(target_username)
-#     print(col(f"IP cacheada para {target_username}: {cached_ip}", "red"))
-#     if cached_ip:
-#         print("entró al iffffffffffffffffffffffffffffff")
-#         print(col(f"Intentando con la IP cacheada para {target_username}: {cached_ip}", "blue"))
-#         success = send_message_to_ip(cached_ip, username, target_username, message_content)
-#         if success:
-#             return  # Mensaje entregado con éxito
-
-#     # Si todo falla, guardar como pendiente
-#     print(col(f"Guardando mensaje como pendiente para {target_username}.", "yellow"))
-#     store_pending_message(username, target_username, message_content)
-
-
+#region send_message
 def send_message(username):
     """Envía un mensaje a otro usuario."""
     target_username = input("Usuario destino: ")
     message_content = input("Mensaje: ")
 
     chat_id = get_or_create_chat(target_username)
+    
+    if is_server_active(GESTOR_HOST, GESTOR_PORT):
+        response = query_user_info(username, target_username)
+        if response.get("status") == "success":
+            target_ip = response.get("ip")
+            update_cached_ip(target_username, target_ip)
+            try:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
+                    client_socket.settimeout(2)
+                    client_socket.connect((target_ip, CLIENT_PORT))
+                    message = {
+                        "sender": username,
+                        "content": message_content,
+                    }
+                    client_socket.sendall(json.dumps(message).encode())
+                    print(col("Mensaje enviado con éxito.", "green"))
 
-    response = query_user_info(username, target_username)
-    if response.get("status") == "success":
-        target_ip = response.get("ip")
-        update_cached_ip(target_username, target_ip)
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
-                client_socket.connect((target_ip, CLIENT_PORT))
-                message = {
-                    "sender": username,
-                    "content": message_content,
-                }
-                client_socket.sendall(json.dumps(message).encode())
-                print(col("Mensaje enviado con éxito.", "green"))
-
-                save_message(chat_id, username, message_content, delivered=True)
-        except Exception as e:
-            print(
-                col(
-                    f"Error al enviar el mensaje. Guardando como pendiente: {str(e)}",
-                    "yellow",
+                    save_message(chat_id, username, message_content, delivered=True)
+            except Exception as e:
+                print(
+                    col(
+                        f"Error al enviar el mensaje. Guardando como pendiente: {str(e)}",
+                        "yellow",
+                    )
                 )
-            )
-            store_pending_message(username, target_username, message_content)
+                store_pending_message(username, target_username, message_content)
+            return
     else:
         print(
             col(
-                f"No se pudo obtener información de {target_username} del gestor.",
+                f"No se encontro al gestor en la red.",
                 "yellow",
             )
         )
         cached_ip = get_cached_ip(target_username)
-        print(col(f"IP cacheada para {target_username}: {cached_ip}", "red"))
         if cached_ip:
             print(
                 col(
@@ -539,165 +514,71 @@ def send_message(username):
                 cached_ip, username, target_username, message_content
             )
             if success:
-                return  # Mensaje entregado con éxito
+                return 
 
-        # Si todo falla, guardar como pendiente
-        print(
-            col(
-                f"El usuario {target_username} está desconectado o no está registrado.",
-                "yellow",
-            )
+    print(
+        col(
+            f"El usuario {target_username} está desconectado o no está registrado.",
+            "yellow",
         )
-        store_pending_message(username, target_username, message_content)
+    )
+    store_pending_message(username, target_username, message_content)
 
 
+#region start_message_listener
 listener_thread = None
-
-#viejo
-
 def start_message_listener(username):
     """Inicia un servidor para recibir mensajes de otros usuarios."""
     global listener_thread
 
     def listen():
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
-            server_socket.setsockopt(
-                socket.SOL_SOCKET, socket.SO_REUSEADDR, 1
-            )  # Reutilización del puerto
+            server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             server_socket.bind(("", CLIENT_PORT))
             server_socket.listen(5)
-            print(
-                col(
-                    f"[{username}] Escuchando mensajes en el puerto {CLIENT_PORT}...",
-                    "green",
-                )
-            )
+            server_socket.settimeout(1) 
+            print(col(f"[{username}] Escuchando mensajes en el puerto {CLIENT_PORT}...", "green"))
 
             while not stop_event.is_set():
-                conn, addr = server_socket.accept()
-                with conn:
-                    try:
-                        message_data = conn.recv(BUFFER_SIZE).decode()
-                        message_json = json.loads(message_data)
+                try:
+                    conn, addr = server_socket.accept()
+                    with conn:
+                        try:
+                            message_data = conn.recv(BUFFER_SIZE).decode()
+                            message_json = json.loads(message_data)
 
-                        # Nueva verificación para `who_is_connected`
-                        if message_json.get("action") == "who_is_connected":
-                            conn.sendall(json.dumps({"username": username}).encode())
-                            print(col(f"Respondido a 'who_is_connected': {username}", "blue"))
+                            if message_json.get("action") == "who_is_connected":
+                                conn.sendall(json.dumps({"username": username}).encode())
+                                continue
 
-                            continue
+                            sender = message_json.get("sender")
+                            content = message_json.get("content")
 
-                        sender = message_json.get("sender")
-                        content = message_json.get("content")
+                            if not sender or not content:
+                                continue
 
-                        if not sender or not content:
-                            # print(col(f"Mensaje inválido recibido de {addr[0]}", "red"))
-                            continue
+                            print(col(f"Nuevo mensaje de {sender}: {content}", "cyan"))
+                            update_cached_ip(sender, addr[0])
 
-                        print(col(f"Nuevo mensaje de {sender}: {content}", "cyan"))
+                            chat_id = get_or_create_chat(sender)
+                            save_message(chat_id, sender, content, delivered=True)
+                        except json.JSONDecodeError:
+                            print(col(f"Error al decodificar el mensaje de {addr[0]}", "red"))
+                        except Exception as e:
+                            print(col(f"Error al procesar mensaje de {addr[0]}: {str(e)}", "red"))
+                except socket.timeout:
+                    continue 
 
-                        chat_id = get_or_create_chat(sender)
-
-                        save_message(chat_id, sender, content, delivered=True)
-                    except json.JSONDecodeError:
-                        print(
-                            col(f"Error al decodificar el mensaje de {addr[0]}", "red")
-                        )
-                    except Exception as e:
-                        print(
-                            col(
-                                f"Error al procesar mensaje de {addr[0]}: {str(e)}",
-                                "red",
-                            )
-                        )
+            logging.info("Hilo message_listener finalizado.")
 
     if listener_thread and listener_thread.is_alive():
-        print(col("Listener ya está corriendo.", "yellow"))
+        logging.info(col("Listener ya está corriendo.", "yellow"))
         return
 
     listener_thread = threading.Thread(target=listen, daemon=True)
     listener_thread.start()
 
-#nuevo
-# def start_message_listener(username: str):
-#     """Inicia un servidor para recibir mensajes de otros usuarios."""
-#     global listener_thread
-
-#     def listen():
-#         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
-#             server_socket.setsockopt(
-#                 socket.SOL_SOCKET, socket.SO_REUSEADDR, 1
-#             )  # Reutilización del puerto
-#             server_socket.bind(("", CLIENT_PORT))
-#             server_socket.listen(5)
-#             print(
-#                 col(
-#                     f"[{username}] Escuchando mensajes en el puerto {CLIENT_PORT}...",
-#                     "green",
-#                 )
-#             )
-
-#             while not stop_event.is_set():
-#                 conn, addr = server_socket.accept()
-#                 with conn:
-#                     try:
-#                         message_data = conn.recv(BUFFER_SIZE).decode()
-#                         message_json = json.loads(message_data)
-
-#                         action = message_json.get("action")
-#                         if action == "who_is_connected":
-#                             handle_who_is_connected(conn, username)
-#                         elif action == "send_message":
-#                             handle_received_message(conn, message_json, addr)
-#                         else:
-#                             print(col(f"Acción desconocida: {action}", "yellow"))
-#                     except json.JSONDecodeError:
-#                         print(
-#                             col(f"Error al decodificar el mensaje de {addr[0]}", "red")
-#                         )
-#                     except Exception as e:
-#                         print(
-#                             col(
-#                                 f"Error al procesar mensaje de {addr[0]}: {str(e)}",
-#                                 "red",
-#                             )
-#                         )
-
-#     if listener_thread and listener_thread.is_alive():
-#         print(col("Listener ya está corriendo.", "yellow"))
-#         return
-
-#     listener_thread = threading.Thread(target=listen, daemon=True)
-#     listener_thread.start()
-
-
-def handle_who_is_connected(conn, username: str):
-    """Maneja la acción 'who_is_connected' y responde con el usuario conectado."""
-    try:
-        response = {"username": username}
-        conn.sendall(json.dumps(response).encode())
-        print(col(f"Respondido a 'who_is_connected': {username}", "blue"))
-    except Exception as e:
-        print(col(f"Error al manejar 'who_is_connected': {str(e)}", "red"))
-
-
-def handle_received_message(conn, message_json: dict, addr: tuple):
-    """Procesa un mensaje recibido y lo guarda en la base de datos."""
-    sender = message_json.get("sender")
-    content = message_json.get("content")
-
-    if not sender or not content:
-        print(col(f"Mensaje inválido recibido de {addr[0]}", "red"))
-        return
-
-    print(col(f"Nuevo mensaje de {sender}: {content}", "cyan"))
-    chat_id = get_or_create_chat(sender)
-    save_message(chat_id, sender, content, delivered=True)
-
-
 # region pending messages
-
-
 def store_pending_message(sender, receiver, content):
     """Guarda un mensaje pendiente en la base de datos."""
     conn = sqlite3.connect(DB_FILE)
@@ -720,7 +601,10 @@ def start_pending_message_worker(username):
     def worker():
         while not stop_event.is_set():
             check_and_send_pending_messages(username)
-            time.sleep(5)  # Intervalo de 5 segundos entre verificaciones
+            if stop_event.wait(timeout=5): 
+                break
+        
+        logging.info("Hilo pending_message_worker terminado")
 
     thread = threading.Thread(target=worker, daemon=True)
     thread.start()
@@ -742,12 +626,11 @@ def check_and_send_pending_messages(username):
     for msg_id, receiver, message_content in pending_messages:
         target_ip = get_cached_ip(receiver)
 
-        # Intentar enviar el mensaje con el servidor activo
-        if SERVER_UP:
+        if is_server_active(GESTOR_HOST, GESTOR_PORT):
             response = query_user_info(username, receiver)
             if response.get("status") == "success":
                 target_ip = response.get("ip")
-                update_cached_ip(receiver, target_ip)  # Actualizar la IP cacheada
+                update_cached_ip(receiver, target_ip)  
                 if send_message_to_ip(target_ip, username, receiver, message_content):
                     cursor.execute(
                         "DELETE FROM pending_messages WHERE id = ?", (msg_id,)
@@ -760,7 +643,6 @@ def check_and_send_pending_messages(username):
                     f"El usuario {receiver} no está conectado. {response.get('message')}"
                 )
 
-        # Si el servidor no está activo, usar la IP cacheada
         elif target_ip:
             logging.info(f"Intentando usar la IP cacheada para {receiver}: {target_ip}")
             if send_message_to_ip(target_ip, username, receiver, message_content):
@@ -777,42 +659,50 @@ def check_and_send_pending_messages(username):
     conn.close()
 
 
+#region send_messge__to_ip
+
 def send_message_to_ip(ip, sender, receiver, message_content):
-    """Intenta conectar y enviar un mensaje al destinatario en una IP específica."""
+    """Intenta conectar y enviar un mensaje al destinatario en una IP específica usando dos conexiones."""
     try:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
-            client_socket.settimeout(5)
-            client_socket.connect((ip, CLIENT_PORT))
+        # Primera conexión: Verificar quién está conectado
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as query_socket:
+            query_socket.settimeout(5)
+            query_socket.connect((ip, CLIENT_PORT))
+            
+            # Enviar solicitud 'who_is_connected'
+            who_is_connected = {"action": "who_is_connected"}
+            who_json = json.dumps(who_is_connected)
 
-            # Preguntar quién está conectado en la IP
-            client_socket.sendall(json.dumps({"action": "who_is_connected"}).encode())
-            response = json.loads(client_socket.recv(BUFFER_SIZE).decode())
-
-            # Validar si el usuario conectado es el receptor esperado
-            if response.get("username") == receiver:
-
-                print("entro al if de send_message_to_ip")
-
-                message = {
-                    "sender": sender,
-                    "content": message_content,
-                }
-                print(col(f"message enviado por send_message_to_ip: {message}", "red"))
-
-
-                client_socket.sendall(json.dumps(message).encode())
-                print(
-                    col(f"Mensaje entregado a {receiver}: {message_content}", "green")
-                )
-                return True
-            else:
+            query_socket.sendall(who_json.encode())
+            response_data = query_socket.recv(BUFFER_SIZE).decode()
+            response = json.loads(response_data)
+            
+            # Validar receptor
+            if response.get("username") != receiver:
                 print(col(f"El usuario en {ip} no es {receiver}.", "yellow"))
-    except (socket.timeout, ConnectionRefusedError, OSError) as e:
-        print(
-            col(f"Error al intentar conectar con {receiver} en {ip}: {str(e)}", "red")
-        )
-    return False
+                return False
 
+        
+        # Segunda conexión: Enviar el mensaje
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as message_socket:
+            message_socket.settimeout(5)
+            message_socket.connect((ip, CLIENT_PORT))
+            
+            # Preparar y enviar el mensaje
+            message = {
+                "sender": sender,
+                "content": message_content,
+            }
+            message_json = json.dumps(message)
+            message_socket.sendall(message_json.encode())
+            print(col(f"Mensaje entregado a {receiver}: {message_content}", "green"))
+            return True
+
+    except (socket.timeout, ConnectionRefusedError, OSError) as e:
+        logging.error(col(f"Error al intentar conectar con {receiver} en {ip}: {str(e)}", "red"))
+    except json.JSONDecodeError as e:
+        logging.error(col(f"Error al decodificar JSON: {str(e)}", "red"))
+    return False
 
 def save_message_to_chat(receiver, sender, message_content):
     """Guarda un mensaje entregado en la tabla de mensajes y actualiza el chat."""
@@ -831,7 +721,7 @@ def get_cached_ip(username):
 def update_cached_ip(username, ip):
     """Actualiza la IP cacheada de un usuario."""
     cache[username] = ip
-    print(col(f"IP cacheada para {username} actualizada a {ip}.", "blue"))
+    # print(col(f"IP cacheada para {username} actualizada a {ip}.", "blue"))
 
 
 # region main
@@ -899,13 +789,16 @@ def main():
                     sub_choice = input("Opción: ")
 
                     if sub_choice == "1":
-                        target_username = input("\tNombre de usuario a consultar: ")
-                        response = query_user_info(username, target_username)
-                        if response.get("status") == "success":
-                            print(col(f"{response.get('ip')}", "magenta"))
-                            # print(f"Llave Pública:\n{response.get('public_key')}")
+                        if is_server_active(GESTOR_HOST, GESTOR_PORT):
+                            target_username = input("\tNombre de usuario a consultar: ")
+                            response = query_user_info(username, target_username)
+                            if response.get("status") == "success":
+                                print(col(f"{response.get('ip')}", "magenta"))
+                                # print(f"Llave Pública:\n{response.get('public_key')}")
+                            else:
+                                print(col(f"Error: {response.get('message')}", "red"))
                         else:
-                            print(col(f"Error: {response.get('message')}", "red"))
+                            print(col("El servidor se encuentra intentelo de nuevo mas tarde.",'red'))
                     elif sub_choice == "2":
                         send_message(username)
                     elif sub_choice == "3":
@@ -914,8 +807,8 @@ def main():
                         open_chat()
                     elif sub_choice == "5":
                         print("Cerrando sesión...")
-                        stop_event.set()
-                        alive_thread.join()
+                        logout()
+                        print(col("Sesión cerrada correctamente.", "green"))
                         break
                     else:
                         print(col("Opción no válida. Intenta nuevamente.", "red"))
