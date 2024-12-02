@@ -1,5 +1,7 @@
 # Distributed-Systems-Project. **WhatsApp P2P**
 
+![WhatsAppP2P]()
+
 ## Overview
 
 This project is a decentralized Peer-to-Peer (P2P) messaging application inspired by the functionalities of modern chat systems like WhatsApp. The application enables users to communicate securely and efficiently without relying on a centralized server to store messages. Instead, the architecture leverages local caching, SQLite databases for user-specific storage, and Docker-based networking to simulate real-world distributed systems.
@@ -106,14 +108,14 @@ The project is built in Python and employs Docker for containerization, with mul
 
 2. Build and launch the Docker containers:
 
-On linux:
+ - On linux:
 
    ```bash
    chmod +x startup.sh
    ./startup.sh
    ```
 
-On windows:
+ - On windows:
    ```bash
    ./startup.bat
    ```
