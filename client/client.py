@@ -214,7 +214,7 @@ def send_alive_signal(username, public_key_str, stop_event):
     while not stop_event.is_set():
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.settimeout(1) 
+                s.settimeout(1)
                 s.connect((GESTOR_HOST, GESTOR_PORT))
                 message = {
                     "action": "alive_signal",
@@ -269,7 +269,7 @@ def query_user_info(username, target_username):
 
             if response.get("status") == "success":
                 target_ip = response.get("ip")
-                update_cached_ip(target_username, target_ip) 
+                update_cached_ip(target_username, target_ip)
             return response
     except Exception as e:
         print(col(f"Error al consultar información del servidor: {str(e)}", "red"))
@@ -461,14 +461,15 @@ def open_chat():
     except ValueError:
         print(col("ID del chat no válido.", "red"))
 
-#region send_message
+
+# region send_message
 def send_message(username):
     """Envía un mensaje a otro usuario."""
     target_username = input("Usuario destino: ")
     message_content = input("Mensaje: ")
 
     chat_id = get_or_create_chat(target_username)
-    
+
     if is_server_active(GESTOR_HOST, GESTOR_PORT):
         response = query_user_info(username, target_username)
         if response.get("status") == "success":
@@ -483,7 +484,7 @@ def send_message(username):
                         "content": message_content,
                     }
                     client_socket.sendall(json.dumps(message).encode())
-                    print(col("Mensaje enviado con éxito.", "green"))
+                    print(col(f"Mensaje entregado a {target_username}: {message_content}", "green"))
 
                     save_message(chat_id, username, message_content, delivered=True)
             except Exception as e:
@@ -514,7 +515,8 @@ def send_message(username):
                 cached_ip, username, target_username, message_content
             )
             if success:
-                return 
+                save_message(chat_id, username, message_content, delivered=True)
+                return
 
     print(
         col(
@@ -525,8 +527,10 @@ def send_message(username):
     store_pending_message(username, target_username, message_content)
 
 
-#region start_message_listener
+# region start_message_listener
 listener_thread = None
+
+
 def start_message_listener(username):
     """Inicia un servidor para recibir mensajes de otros usuarios."""
     global listener_thread
@@ -536,8 +540,13 @@ def start_message_listener(username):
             server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             server_socket.bind(("", CLIENT_PORT))
             server_socket.listen(5)
-            server_socket.settimeout(1) 
-            print(col(f"[{username}] Escuchando mensajes en el puerto {CLIENT_PORT}...", "green"))
+            server_socket.settimeout(1)
+            print(
+                col(
+                    f"[{username}] Escuchando mensajes en el puerto {CLIENT_PORT}...",
+                    "green",
+                )
+            )
 
             while not stop_event.is_set():
                 try:
@@ -548,7 +557,9 @@ def start_message_listener(username):
                             message_json = json.loads(message_data)
 
                             if message_json.get("action") == "who_is_connected":
-                                conn.sendall(json.dumps({"username": username}).encode())
+                                conn.sendall(
+                                    json.dumps({"username": username}).encode()
+                                )
                                 continue
 
                             sender = message_json.get("sender")
@@ -563,11 +574,21 @@ def start_message_listener(username):
                             chat_id = get_or_create_chat(sender)
                             save_message(chat_id, sender, content, delivered=True)
                         except json.JSONDecodeError:
-                            print(col(f"Error al decodificar el mensaje de {addr[0]}", "red"))
+                            print(
+                                col(
+                                    f"Error al decodificar el mensaje de {addr[0]}",
+                                    "red",
+                                )
+                            )
                         except Exception as e:
-                            print(col(f"Error al procesar mensaje de {addr[0]}: {str(e)}", "red"))
+                            print(
+                                col(
+                                    f"Error al procesar mensaje de {addr[0]}: {str(e)}",
+                                    "red",
+                                )
+                            )
                 except socket.timeout:
-                    continue 
+                    continue
 
             logging.info("Hilo message_listener finalizado.")
 
@@ -577,6 +598,7 @@ def start_message_listener(username):
 
     listener_thread = threading.Thread(target=listen, daemon=True)
     listener_thread.start()
+
 
 # region pending messages
 def store_pending_message(sender, receiver, content):
@@ -601,9 +623,9 @@ def start_pending_message_worker(username):
     def worker():
         while not stop_event.is_set():
             check_and_send_pending_messages(username)
-            if stop_event.wait(timeout=5): 
+            if stop_event.wait(timeout=5):
                 break
-        
+
         logging.info("Hilo pending_message_worker terminado")
 
     thread = threading.Thread(target=worker, daemon=True)
@@ -630,7 +652,7 @@ def check_and_send_pending_messages(username):
             response = query_user_info(username, receiver)
             if response.get("status") == "success":
                 target_ip = response.get("ip")
-                update_cached_ip(receiver, target_ip)  
+                update_cached_ip(receiver, target_ip)
                 if send_message_to_ip(target_ip, username, receiver, message_content):
                     cursor.execute(
                         "DELETE FROM pending_messages WHERE id = ?", (msg_id,)
@@ -659,7 +681,8 @@ def check_and_send_pending_messages(username):
     conn.close()
 
 
-#region send_messge__to_ip
+# region send_message_to_ip
+
 
 def send_message_to_ip(ip, sender, receiver, message_content):
     """Intenta conectar y enviar un mensaje al destinatario en una IP específica usando dos conexiones."""
@@ -668,7 +691,7 @@ def send_message_to_ip(ip, sender, receiver, message_content):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as query_socket:
             query_socket.settimeout(5)
             query_socket.connect((ip, CLIENT_PORT))
-            
+
             # Enviar solicitud 'who_is_connected'
             who_is_connected = {"action": "who_is_connected"}
             who_json = json.dumps(who_is_connected)
@@ -676,18 +699,17 @@ def send_message_to_ip(ip, sender, receiver, message_content):
             query_socket.sendall(who_json.encode())
             response_data = query_socket.recv(BUFFER_SIZE).decode()
             response = json.loads(response_data)
-            
+
             # Validar receptor
             if response.get("username") != receiver:
                 print(col(f"El usuario en {ip} no es {receiver}.", "yellow"))
                 return False
 
-        
         # Segunda conexión: Enviar el mensaje
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as message_socket:
             message_socket.settimeout(5)
             message_socket.connect((ip, CLIENT_PORT))
-            
+
             # Preparar y enviar el mensaje
             message = {
                 "sender": sender,
@@ -699,10 +721,13 @@ def send_message_to_ip(ip, sender, receiver, message_content):
             return True
 
     except (socket.timeout, ConnectionRefusedError, OSError) as e:
-        logging.error(col(f"Error al intentar conectar con {receiver} en {ip}: {str(e)}", "red"))
+        logging.error(
+            col(f"Error al intentar conectar con {receiver} en {ip}: {str(e)}", "red")
+        )
     except json.JSONDecodeError as e:
         logging.error(col(f"Error al decodificar JSON: {str(e)}", "red"))
     return False
+
 
 def save_message_to_chat(receiver, sender, message_content):
     """Guarda un mensaje entregado en la tabla de mensajes y actualiza el chat."""
@@ -798,7 +823,12 @@ def main():
                             else:
                                 print(col(f"Error: {response.get('message')}", "red"))
                         else:
-                            print(col("El servidor se encuentra intentelo de nuevo mas tarde.",'red'))
+                            print(
+                                col(
+                                    "El servidor se encuentra desconectado. Inténtelo de nuevo mas tarde.",
+                                    "red",
+                                )
+                            )
                     elif sub_choice == "2":
                         send_message(username)
                     elif sub_choice == "3":
