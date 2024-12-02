@@ -108,29 +108,29 @@ The project is built in Python and employs Docker for containerization, with mul
 
 On linux:
 
-	```bash
-	chmod +x startup.sh
-	./startup.sh
-	```
+   ```bash
+   chmod +x startup.sh
+   ./startup.sh
+   ```
 
 On windows:
-	```bash
-	./startup.bat
-	```
+   ```bash
+   ./startup.bat
+   ```
 
 3. Interact with the clients:
-   - Attach to a client container in:
-     ```bash
-     docker exec -it client1 bash
-     python3 client.py
-     ```
+
+   ```bash
+   docker exec -it client1 bash
+   python3 client.py
+   ```
 
 4. To change ip:
 
- 	```bash
- 	docker network disconnect distributed-systems-project_server_network server
-	docker network connect --ip 192.168.1.3 distributed-systems-project_server_network server
-	```
+   ```bash
+   docker network disconnect distributed-systems-project_server_network server
+   docker network connect --ip 192.168.1.3 distributed-systems-project_server_network server
+   ```
 
 ### Prerequisites
 - Docker
