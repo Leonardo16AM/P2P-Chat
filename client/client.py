@@ -251,9 +251,7 @@ def send_alive_signal(username, public_key_str, stop_event):
 
 # region user_query
 def query_user_info(username, target_username):
-    """
-    Consulta información de un usuario en el servidor.
-    """
+    """Consulta la información de un usuario en el servidor y actualiza la caché."""
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.connect((GESTOR_HOST, GESTOR_PORT))
@@ -263,11 +261,15 @@ def query_user_info(username, target_username):
                 "target_username": target_username,
             }
             s.sendall(json.dumps(message).encode())
-            response = s.recv(4096)
-            response = json.loads(response.decode())
+            response = json.loads(s.recv(BUFFER_SIZE).decode())
+
+            if response.get("status") == "success":
+                target_ip = response.get("ip")
+                update_cached_ip(target_username, target_ip)  # Actualizar la caché
             return response
     except Exception as e:
-        return {"status": "error", "message": f"Error de conexión: {str(e)}"}
+        print(col(f"Error al consultar información del servidor: {str(e)}", "red"))
+        return {"status": "error", "message": "No se pudo conectar al servidor."}
 
 
 # region database
@@ -456,6 +458,37 @@ def open_chat():
         print(col("ID del chat no válido.", "red"))
 
 
+# def send_message(username):
+#     """Envía un mensaje o lo guarda como pendiente si no puede entregarlo."""
+#     target_username = input("Usuario destino: ")
+#     message_content = input("Mensaje: ")
+
+#     # Intentar obtener la IP desde el gestor
+#     response = query_user_info(username, target_username)
+#     if response.get("status") == "success":
+#         target_ip = response.get("ip")
+#         update_cached_ip(target_username, target_ip)  # Actualizar cache
+#         success = send_message_to_ip(target_ip, username, target_username, message_content)
+#         if success:
+#             return  # Mensaje entregado con éxito
+#     else:
+#         print(col(f"No se pudo obtener información de {target_username} del gestor.", "yellow"))
+
+#     # Si no se logró, intentar con IP cacheada
+#     cached_ip = get_cached_ip(target_username)
+#     print(col(f"IP cacheada para {target_username}: {cached_ip}", "red"))
+#     if cached_ip:
+#         print("entró al iffffffffffffffffffffffffffffff")
+#         print(col(f"Intentando con la IP cacheada para {target_username}: {cached_ip}", "blue"))
+#         success = send_message_to_ip(cached_ip, username, target_username, message_content)
+#         if success:
+#             return  # Mensaje entregado con éxito
+
+#     # Si todo falla, guardar como pendiente
+#     print(col(f"Guardando mensaje como pendiente para {target_username}.", "yellow"))
+#     store_pending_message(username, target_username, message_content)
+
+
 def send_message(username):
     """Envía un mensaje a otro usuario."""
     target_username = input("Usuario destino: ")
@@ -466,6 +499,7 @@ def send_message(username):
     response = query_user_info(username, target_username)
     if response.get("status") == "success":
         target_ip = response.get("ip")
+        update_cached_ip(target_username, target_ip)
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
                 client_socket.connect((target_ip, CLIENT_PORT))
@@ -488,6 +522,28 @@ def send_message(username):
     else:
         print(
             col(
+                f"No se pudo obtener información de {target_username} del gestor.",
+                "yellow",
+            )
+        )
+        cached_ip = get_cached_ip(target_username)
+        print(col(f"IP cacheada para {target_username}: {cached_ip}", "red"))
+        if cached_ip:
+            print(
+                col(
+                    f"Intentando con la IP cacheada para {target_username}: {cached_ip}",
+                    "blue",
+                )
+            )
+            success = send_message_to_ip(
+                cached_ip, username, target_username, message_content
+            )
+            if success:
+                return  # Mensaje entregado con éxito
+
+        # Si todo falla, guardar como pendiente
+        print(
+            col(
                 f"El usuario {target_username} está desconectado o no está registrado.",
                 "yellow",
             )
@@ -497,6 +553,7 @@ def send_message(username):
 
 listener_thread = None
 
+#viejo
 
 def start_message_listener(username):
     """Inicia un servidor para recibir mensajes de otros usuarios."""
@@ -522,6 +579,13 @@ def start_message_listener(username):
                     try:
                         message_data = conn.recv(BUFFER_SIZE).decode()
                         message_json = json.loads(message_data)
+
+                        # Nueva verificación para `who_is_connected`
+                        if message_json.get("action") == "who_is_connected":
+                            conn.sendall(json.dumps({"username": username}).encode())
+                            print(col(f"Respondido a 'who_is_connected': {username}", "blue"))
+
+                            continue
 
                         sender = message_json.get("sender")
                         content = message_json.get("content")
@@ -553,6 +617,82 @@ def start_message_listener(username):
 
     listener_thread = threading.Thread(target=listen, daemon=True)
     listener_thread.start()
+
+#nuevo
+# def start_message_listener(username: str):
+#     """Inicia un servidor para recibir mensajes de otros usuarios."""
+#     global listener_thread
+
+#     def listen():
+#         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
+#             server_socket.setsockopt(
+#                 socket.SOL_SOCKET, socket.SO_REUSEADDR, 1
+#             )  # Reutilización del puerto
+#             server_socket.bind(("", CLIENT_PORT))
+#             server_socket.listen(5)
+#             print(
+#                 col(
+#                     f"[{username}] Escuchando mensajes en el puerto {CLIENT_PORT}...",
+#                     "green",
+#                 )
+#             )
+
+#             while not stop_event.is_set():
+#                 conn, addr = server_socket.accept()
+#                 with conn:
+#                     try:
+#                         message_data = conn.recv(BUFFER_SIZE).decode()
+#                         message_json = json.loads(message_data)
+
+#                         action = message_json.get("action")
+#                         if action == "who_is_connected":
+#                             handle_who_is_connected(conn, username)
+#                         elif action == "send_message":
+#                             handle_received_message(conn, message_json, addr)
+#                         else:
+#                             print(col(f"Acción desconocida: {action}", "yellow"))
+#                     except json.JSONDecodeError:
+#                         print(
+#                             col(f"Error al decodificar el mensaje de {addr[0]}", "red")
+#                         )
+#                     except Exception as e:
+#                         print(
+#                             col(
+#                                 f"Error al procesar mensaje de {addr[0]}: {str(e)}",
+#                                 "red",
+#                             )
+#                         )
+
+#     if listener_thread and listener_thread.is_alive():
+#         print(col("Listener ya está corriendo.", "yellow"))
+#         return
+
+#     listener_thread = threading.Thread(target=listen, daemon=True)
+#     listener_thread.start()
+
+
+def handle_who_is_connected(conn, username: str):
+    """Maneja la acción 'who_is_connected' y responde con el usuario conectado."""
+    try:
+        response = {"username": username}
+        conn.sendall(json.dumps(response).encode())
+        print(col(f"Respondido a 'who_is_connected': {username}", "blue"))
+    except Exception as e:
+        print(col(f"Error al manejar 'who_is_connected': {str(e)}", "red"))
+
+
+def handle_received_message(conn, message_json: dict, addr: tuple):
+    """Procesa un mensaje recibido y lo guarda en la base de datos."""
+    sender = message_json.get("sender")
+    content = message_json.get("content")
+
+    if not sender or not content:
+        print(col(f"Mensaje inválido recibido de {addr[0]}", "red"))
+        return
+
+    print(col(f"Nuevo mensaje de {sender}: {content}", "cyan"))
+    chat_id = get_or_create_chat(sender)
+    save_message(chat_id, sender, content, delivered=True)
 
 
 # region pending messages
@@ -641,17 +781,36 @@ def send_message_to_ip(ip, sender, receiver, message_content):
     """Intenta conectar y enviar un mensaje al destinatario en una IP específica."""
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
-            client_socket.settimeout(5)  # Timeout para conexiones
+            client_socket.settimeout(5)
             client_socket.connect((ip, CLIENT_PORT))
-            message = {
-                "sender": sender,
-                "content": message_content,
-            }
-            client_socket.sendall(json.dumps(message).encode())
-            print(col(f"Mensaje entregado a {receiver}: {message_content}", "green"))
-            return True
+
+            # Preguntar quién está conectado en la IP
+            client_socket.sendall(json.dumps({"action": "who_is_connected"}).encode())
+            response = json.loads(client_socket.recv(BUFFER_SIZE).decode())
+
+            # Validar si el usuario conectado es el receptor esperado
+            if response.get("username") == receiver:
+
+                print("entro al if de send_message_to_ip")
+
+                message = {
+                    "sender": sender,
+                    "content": message_content,
+                }
+                print(col(f"message enviado por send_message_to_ip: {message}", "red"))
+
+
+                client_socket.sendall(json.dumps(message).encode())
+                print(
+                    col(f"Mensaje entregado a {receiver}: {message_content}", "green")
+                )
+                return True
+            else:
+                print(col(f"El usuario en {ip} no es {receiver}.", "yellow"))
     except (socket.timeout, ConnectionRefusedError, OSError) as e:
-        logging.error(f"Error al intentar conectar con {receiver} en {ip}: {str(e)}")
+        print(
+            col(f"Error al intentar conectar con {receiver} en {ip}: {str(e)}", "red")
+        )
     return False
 
 
