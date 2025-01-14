@@ -1,5 +1,7 @@
 # Informe del Diseño del Proyecto de Sistemas Distribuidos: WhatsApp P2P
 
+Enero, 2025
+
 ### Equipo:
 
 - **Leonardo D. Artiles Montero (C412)**
