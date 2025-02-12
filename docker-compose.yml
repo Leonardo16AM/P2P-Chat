@@ -35,9 +35,12 @@ services:
     dns:
       - 192.168.1.10
 
-  server:
+  server1:
+    build: .
     image: server-image
-    container_name: server
+    container_name: server1
+    environment:
+      - LOCAL_IP=192.168.1.2
     networks:
       server_network:
         ipv4_address: 192.168.1.2
@@ -48,6 +51,50 @@ services:
     privileged: true
     cap_add:
       - NET_ADMIN
+    # ports:
+    #   - "65432:65432" 
+
+  server2:
+    build: .
+    image: server-image
+    container_name: server2
+    environment:
+      - LOCAL_IP=192.168.1.3
+      - JOIN_NODE=192.168.1.2:65433
+    networks:
+      server_network:
+        ipv4_address: 192.168.1.3
+    stdin_open: true
+    tty: true
+    dns:
+      - 192.168.1.10
+    privileged: true
+    cap_add:
+      - NET_ADMIN
+    # ports:
+    #   - "65432:65432" 
+
+  server3:
+    build: .
+    image: server-image
+    container_name: server3
+    environment:
+      - LOCAL_IP=192.168.1.4
+      - JOIN_NODE=192.168.1.2:65433
+    networks:
+      server_network:
+        ipv4_address: 192.168.1.4
+    stdin_open: true
+    tty: true
+    dns:
+      - 192.168.1.10
+    privileged: true
+    cap_add:
+      - NET_ADMIN
+    # ports:
+    #   - "65432:65432" 
+
+
 
   client1:
     image: client-image

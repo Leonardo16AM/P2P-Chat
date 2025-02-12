@@ -1,0 +1,90 @@
+2025-02-11 13:13:06.224739 - Iniciando gestor. IP: 172.20.10.2, node_id: 2832376170
+2025-02-11 13:13:06.234251 - Base de datos inicializada.
+2025-02-11 13:13:06.236253 - Servidor para clientes iniciado en 0.0.0.0:65432
+2025-02-11 13:13:06.237253 - Servidor entre gestores iniciado en 0.0.0.0:65433
+2025-02-11 13:13:06.238251 - Error en handle_server_connection: int() argument must be a string, a bytes-like object or a real number, not 'NoneType'
+2025-02-11 13:13:11.238398 - Error en handle_server_connection: int() argument must be a string, a bytes-like object or a real number, not 'NoneType'
+2025-02-11 13:13:15.914472 - Gestor finalizado por teclado.
+2025-02-11 13:15:28.195173 - [32mIniciando gestor. IP: 172.20.10.2, node_id: 1201208120[0m
+2025-02-11 13:15:28.198175 - Base de datos inicializada.
+2025-02-11 13:15:28.199174 - Servidor entre gestores iniciado en 0.0.0.0:65433
+2025-02-11 13:15:28.199174 - Servidor para clientes iniciado en 0.0.0.0:65432
+2025-02-11 13:15:28.201174 - Error en handle_server_connection: int() argument must be a string, a bytes-like object or a real number, not 'NoneType'
+2025-02-11 13:15:29.468151 - Gestor finalizado por teclado.
+2025-02-11 13:46:52.096338 - [32mIniciando gestor. IP: 172.20.10.2, node_id: 51721253[0m
+2025-02-11 13:46:52.098338 - Base de datos inicializada.
+2025-02-11 13:47:31.980380 - [32mIniciando gestor. IP: 172.20.10.2, node_id: 3725771130[0m
+2025-02-11 13:47:31.982382 - Base de datos inicializada.
+2025-02-11 13:47:31.984383 - [35m[Chord] Mantenimiento del anillo iniciado (stabilize, fix_fingers, check_predecessor).[0m
+2025-02-11 13:47:31.985379 - [36m[Chord] RPC server listening on 0.0.0.0:65433[0m
+2025-02-11 13:47:47.108805 - [31mGestor finalizado por teclado.[0m
+2025-02-11 13:47:48.099876 - [32mIniciando gestor. IP: 172.20.10.2, node_id: 2031411038[0m
+2025-02-11 13:47:48.101777 - Base de datos inicializada.
+2025-02-11 13:47:57.179606 - [31mGestor finalizado por teclado.[0m
+2025-02-11 13:48:51.241783 - [32mIniciando gestor. IP: 172.20.10.2, node_id: 766818960[0m
+2025-02-11 13:48:51.243782 - Base de datos inicializada.
+2025-02-11 13:49:19.830573 - [32mIniciando gestor. IP: 172.20.10.2, node_id: 2929733893[0m
+2025-02-11 13:49:19.832578 - Base de datos inicializada.
+2025-02-11 13:49:52.506575 - [32mIniciando gestor. IP: 172.20.10.2, node_id: 4243372815[0m
+2025-02-11 13:49:52.508578 - Base de datos inicializada.
+2025-02-11 13:50:11.987917 - [32mIniciando gestor. IP: 172.20.10.2, node_id: 3934870477[0m
+2025-02-11 13:50:11.988917 - Base de datos inicializada.
+2025-02-11 13:53:22.849697 - [32mIniciando gestor. IP: 172.20.10.2, node_id: 3104772521[0m
+2025-02-11 13:53:22.850698 - Base de datos inicializada.
+2025-02-11 13:53:37.218704 - [32mIniciando gestor. IP: 172.20.10.2, node_id: 2951797306[0m
+2025-02-11 13:53:37.220704 - Base de datos inicializada.
+2025-02-11 13:55:19.139605 - [32mIniciando gestor. IP: 172.20.10.2, node_id: 2047601437[0m
+2025-02-11 13:55:19.140605 - Base de datos inicializada.
+2025-02-11 13:55:19.167601 - [36m[Chord] Finger table inicializada con 32 entradas. Sucesor: 2047601437[0m
+2025-02-11 13:55:19.167601 - [32m[Chord] Iniciado anillo nuevo. Este es el primer nodo.[0m
+2025-02-11 13:55:19.169604 - [36m[Chord] Fix_fingers: Entrada 14 actualizada con nodo 2047601437[0m
+2025-02-11 13:55:19.170603 - [35m[Chord] Mantenimiento del anillo iniciado (stabilize, fix_fingers, check_predecessor).[0m
+2025-02-11 13:55:19.171602 - [36m[Chord] RPC server listening on 0.0.0.0:65433[0m
+2025-02-11 13:55:19.675501 - [31m[Chord] Error procesando petición de ('172.20.10.2', 7722): name 'chord_handler' is not defined[0m
+2025-02-11 13:55:19.676501 - [31m[Chord] Error procesando petición de ('172.20.10.2', 7723): name 'chord_handler' is not defined[0m
+2025-02-11 13:55:21.109597 - [31mGestor finalizado por teclado.[0m
+2025-02-11 13:57:01.775130 - [32mIniciando gestor. IP: 172.20.10.2, node_id: 4533761[0m
+2025-02-11 13:57:01.777130 - Base de datos inicializada.
+2025-02-11 13:57:01.809470 - [36m[Chord] Finger table inicializada con 32 entradas. Sucesor: 4533761[0m
+2025-02-11 13:57:01.810472 - [32m[Chord] Iniciado anillo nuevo. Este es el primer nodo.[0m
+2025-02-11 13:57:01.814469 - [36m[Chord] Fix_fingers: Entrada 11 actualizada con nodo 4533761[0m
+2025-02-11 13:57:01.815468 - [35m[Chord] Mantenimiento del anillo iniciado (stabilize, fix_fingers, check_predecessor).[0m
+2025-02-11 13:57:01.817470 - [36m[Chord] RPC server listening on 0.0.0.0:65433[0m
+2025-02-11 13:57:02.323164 - [31m[Chord] Error procesando petición de ('172.20.10.2', 7737): name 'chord_handler' is not defined[0m
+2025-02-11 13:57:02.325141 - [31m[Chord] Error procesando petición de ('172.20.10.2', 7738): name 'chord_handler' is not defined[0m
+2025-02-11 13:57:06.816352 - [36m[Chord] Fix_fingers: Entrada 26 actualizada con nodo 4533761[0m
+2025-02-11 13:57:07.350020 - [31m[Chord] Error procesando petición de ('172.20.10.2', 7740): name 'chord_handler' is not defined[0m
+2025-02-11 13:57:07.365383 - [31m[Chord] Error procesando petición de ('172.20.10.2', 7741): name 'chord_handler' is not defined[0m
+2025-02-11 13:57:11.819002 - [36m[Chord] Fix_fingers: Entrada 18 actualizada con nodo 4533761[0m
+2025-02-11 13:57:12.366355 - [31m[Chord] Error procesando petición de ('172.20.10.2', 7745): name 'chord_handler' is not defined[0m
+2025-02-11 13:57:12.392139 - [31m[Chord] Error procesando petición de ('172.20.10.2', 7746): name 'chord_handler' is not defined[0m
+2025-02-11 13:57:16.820054 - [36m[Chord] Fix_fingers: Entrada 31 actualizada con nodo 4533761[0m
+2025-02-11 13:57:17.407677 - [31m[Chord] Error procesando petición de ('172.20.10.2', 7747): name 'chord_handler' is not defined[0m
+2025-02-11 13:57:17.423625 - [31m[Chord] Error procesando petición de ('172.20.10.2', 7748): name 'chord_handler' is not defined[0m
+2025-02-11 13:57:21.821492 - [36m[Chord] Fix_fingers: Entrada 24 actualizada con nodo 4533761[0m
+2025-02-11 13:57:22.424419 - [31m[Chord] Error procesando petición de ('172.20.10.2', 7750): name 'chord_handler' is not defined[0m
+2025-02-11 13:57:22.425419 - [31m[Chord] Error procesando petición de ('172.20.10.2', 7751): name 'chord_handler' is not defined[0m
+2025-02-11 13:57:26.822344 - [36m[Chord] Fix_fingers: Entrada 18 actualizada con nodo 4533761[0m
+2025-02-11 13:57:27.075090 - [31mGestor finalizado por teclado.[0m
+2025-02-11 13:57:28.130560 - [32mIniciando gestor. IP: 172.20.10.2, node_id: 1958042898[0m
+2025-02-11 13:57:28.132560 - Base de datos inicializada.
+2025-02-11 13:57:28.136558 - [36m[Chord] Finger table inicializada con 32 entradas. Sucesor: 1958042898[0m
+2025-02-11 13:57:28.137559 - [32m[Chord] Iniciado anillo nuevo. Este es el primer nodo.[0m
+2025-02-11 13:57:28.139570 - [36m[Chord] Fix_fingers: Entrada 17 actualizada con nodo 1958042898[0m
+2025-02-11 13:57:28.140560 - [35m[Chord] Mantenimiento del anillo iniciado (stabilize, fix_fingers, check_predecessor).[0m
+2025-02-11 13:57:28.141562 - [36m[Chord] RPC server listening on 0.0.0.0:65433[0m
+2025-02-11 13:57:28.650182 - [33m[Chord] Notify: Predecesor actualizado a 1958042898[0m
+2025-02-11 13:57:33.142020 - [36m[Chord] Fix_fingers: Entrada 29 actualizada con nodo 1958042898[0m
+2025-02-11 13:57:38.144091 - [36m[Chord] Fix_fingers: Entrada 21 actualizada con nodo 1958042898[0m
+2025-02-11 13:57:43.144898 - [36m[Chord] Fix_fingers: Entrada 25 actualizada con nodo 1958042898[0m
+2025-02-11 13:57:48.145965 - [36m[Chord] Fix_fingers: Entrada 12 actualizada con nodo 1958042898[0m
+2025-02-11 13:57:53.147542 - [36m[Chord] Fix_fingers: Entrada 28 actualizada con nodo 1958042898[0m
+2025-02-11 23:05:27.118432 - [32mIniciando gestor. IP: 172.18.0.1, node_id: 4051731371[0m
+2025-02-11 23:05:27.124427 - Base de datos inicializada.
+2025-02-11 23:07:26.425551 - [32mIniciando gestor. IP: 172.18.0.1, node_id: 3132946175[0m
+2025-02-11 23:07:26.426552 - Base de datos inicializada.
+2025-02-11 23:07:50.492115 - [32mIniciando gestor. IP: 172.18.0.1, node_id: 452086843[0m
+2025-02-11 23:07:50.494117 - Base de datos inicializada.
+2025-02-11 23:07:50.497115 - [32m[Chord] Iniciado anillo nuevo. Este es el primer nodo.[0m
+2025-02-11 23:07:50.505117 - [35m[Chord] Mantenimiento del anillo iniciado (stabilize, fix_fingers, check_predecessor).[0m
+2025-02-11 23:07:50.507116 - [36m[Chord] RPC server listening on 0.0.0.0:65433[0m
