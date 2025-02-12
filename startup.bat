@@ -3,8 +3,8 @@ set /p choice="Presiona Enter para solo copiar archivos y reiniciar contenedores
 
 if "%choice%"=="" (
     echo Reiniciando completamente los contenedores...
-    docker stop client1 client2 client3 server1 server2 server3 router
-    docker rm client1 client2 client3 server1 server2 server3 router
+    docker stop client1 client2 client3 server1 server2 server3 server4 server5 router
+    docker rm client1 client2 client3 server1 server2 server3 server4 server5 router
 
     echo Levantando contenedores...
     docker-compose up -d
@@ -16,6 +16,8 @@ if "%choice%"=="" (
     docker cp ./server server1:/app
     docker cp ./server server2:/app
     docker cp ./server server3:/app
+    docker cp ./server server4:/app
+    docker cp ./server server5:/app
 
     echo Contenedores actualizados y reiniciados correctamente.
     exit /b
@@ -23,8 +25,8 @@ if "%choice%"=="" (
 
 if "%choice%"=="build" (
     echo Realizando build completo...
-    docker stop client1 client2 client3 server1 server2 server3 router
-    docker rm client1 client2 client3 server1 server2 server3 router
+    docker stop client1 client2 client3 server1 server2 server3 server4 server5 router
+    docker rm client1 client2 client3 server1 server2 server3 server4 server5 router
 
     docker build -t router-image -f Dockerfile.router .
     if %ERRORLEVEL% neq 0 (

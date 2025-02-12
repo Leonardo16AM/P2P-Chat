@@ -94,6 +94,46 @@ services:
     # ports:
     #   - "65432:65432" 
 
+  server4:
+    build: .
+    image: server-image
+    container_name: server4
+    environment:
+      - LOCAL_IP=192.168.1.5
+      - JOIN_NODE=192.168.1.2:65433
+    networks:
+      server_network:
+        ipv4_address: 192.168.1.5
+    stdin_open: true
+    tty: true
+    dns:
+      - 192.168.1.10
+    privileged: true
+    cap_add:
+      - NET_ADMIN
+    # ports:
+    #   - "65432:65432" 
+
+  server5:
+    build: .
+    image: server-image
+    container_name: server5
+    environment:
+      - LOCAL_IP=192.168.1.6
+      - JOIN_NODE=192.168.1.2:65433
+    networks:
+      server_network:
+        ipv4_address: 192.168.1.6
+    stdin_open: true
+    tty: true
+    dns:
+      - 192.168.1.10
+    privileged: true
+    cap_add:
+      - NET_ADMIN
+    # ports:
+    #   - "65432:65432" 
+
 
 
   client1:

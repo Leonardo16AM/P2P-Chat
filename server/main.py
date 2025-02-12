@@ -26,7 +26,6 @@ def initialize_global_state():
     # Se calcula un identificador simple para este nodo (por ejemplo, usando la función hash de Python)
     my_node_id_value = hash(local_ip_value + str(SERVER_PORT)) & 0xffffffff  # 32 bits
     gs.my_node_id = my_node_id_value
-    
     log_message(col(f"Iniciando gestor. IP: {gs.local_ip}, node_id: {gs.my_node_id}",'green'))
 
 #region CHORD server
@@ -47,7 +46,6 @@ def chord_server():
                 request = json.loads(data.decode())
                 from .ring import chord_handler, print_ft
                 response = chord_handler(request)
-                print_ft()
                 conn.sendall(json.dumps(response).encode())
         except Exception as e:
             log_message(col(f"[Chord] Error procesando petición de {addr}: {e}", "red"))
@@ -56,14 +54,16 @@ def chord_server():
 
 #region main
 def main():
+    print("______________________________________________________________")
     initialize_global_state()
     init_db()
 
     
-    from .ring import join, start_chord_maintenance
+    from .ring import join, start_chord_maintenance,ring_init
     # Si se proporciona la variable de entorno JOIN_NODE (formato ip:puerto),
     # se une a un anillo existente. De lo contrario, se arranca un anillo nuevo.
     join_node = os.environ.get("JOIN_NODE")
+    ring_init()
     if join_node:
         try:
             ip, port_str = join_node.split(":")
