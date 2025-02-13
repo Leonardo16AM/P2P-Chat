@@ -5,7 +5,7 @@ import json
 import random
 from termcolor import colored
 from .logging import log_message
-from .config import SERVER_PORT, RING_UPDATE_INTERVAL, FIX_FINGERS_INTERVAL, CHECK_PREDECESSOR_INTERVAL,CHECK_SUCCESSOR_INTERVAL
+from .config import SERVER_PORT, RING_UPDATE_INTERVAL, TIMEOUT,FIX_FINGERS_INTERVAL, CHECK_PREDECESSOR_INTERVAL,CHECK_SUCCESSOR_INTERVAL
 from .global_state import my_node_id, local_ip
 
 finger_table=[]
@@ -83,21 +83,16 @@ def find_successor(id_val,event=-1,hard_mode=False):
     global my_node_id, successor, predecessor
 
     if my_node_id == successor["id"]:
-        print(colored(">>1",'red'))
         return current
     
     if in_interval(id_val, my_node_id, successor["id"], inclusive_end=True):
-        
-        print(colored(">>2",'red'))
         return successor
     else:
         if hard_mode:
-            
-            print(colored(">>3",'red'))
             for node in finger_table:
                 try:    
                     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                        s.settimeout(2)
+                        s.settimeout(TIMEOUT)
                         s.connect((node["ip"], node["port"]))
                         msg = {"action": "find_successor", "id": id_val,"hard_mode":1,"event":event}
                         s.sendall(json.dumps(msg).encode())
@@ -110,14 +105,12 @@ def find_successor(id_val,event=-1,hard_mode=False):
                     log_message(colored(f"[Chord] Error en find_successor RPC a nodo {node['id']}: {e}", "red"))
                     return {}
         else:
-        
-            print(colored(">>4",'red'))
             next_node = closest_preceding_finger(id_val)
             if next_node["id"] == my_node_id:
                 return successor
             try:    
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                    s.settimeout(2)
+                    s.settimeout(TIMEOUT)
                     s.connect((next_node["ip"], next_node["port"]))
                     msg = {"action": "find_successor", "id": id_val,"hard_mode":0,"event":event}
                     s.sendall(json.dumps(msg).encode())
@@ -146,7 +139,7 @@ def find_predecessor(id_val,event=-1,hard_mode=False):
             for node in finger_table:
                 try:    
                     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                        s.settimeout(2)
+                        s.settimeout(TIMEOUT)
                         s.connect((node["ip"], node["port"]))
                         msg = {"action": "find_predecessor", "id": id_val,"hard_mode":1,"event":event}
                         s.sendall(json.dumps(msg).encode())
@@ -164,7 +157,7 @@ def find_predecessor(id_val,event=-1,hard_mode=False):
                 return next_node
             try:    
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                    s.settimeout(2)
+                    s.settimeout(TIMEOUT)
                     s.connect((next_node["ip"], next_node["port"]))
                     msg = {"action": "find_predecessor", "id": id_val,"hard_mode":0,"event":event}
                     s.sendall(json.dumps(msg).encode())
@@ -185,7 +178,7 @@ def nodes_connected(event=-1):
     ans=1
     try:    
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.settimeout(3)
+            s.settimeout(TIMEOUT)
             s.connect((successor["ip"], successor["port"]))
             msg = {"action": "nodes_connected","event":event}
             s.sendall(json.dumps(msg).encode())
@@ -202,7 +195,7 @@ def nodes_connected(event=-1):
 def update_successor(node,new_successor):
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.settimeout(2)
+            s.settimeout(TIMEOUT)
             s.connect((node["ip"], node["port"]))
             msg = {"action": "update_successor", "node": new_successor}
             s.sendall(json.dumps(msg).encode())
@@ -215,7 +208,7 @@ def update_successor(node,new_successor):
 def update_predecessor(node,new_predecessor):
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.settimeout(2)
+            s.settimeout(TIMEOUT)
             s.connect((node["ip"], node["port"]))
             msg = {"action": "update_predecessor", "node":new_predecessor}
             s.sendall(json.dumps(msg).encode())
@@ -229,14 +222,16 @@ def update_next(i,event):
     if event!=-1 and event in events:
        return {}
     events.add(event)
+    print(colored(f">> Updating next {i}",'red'))
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.settimeout(2)
+            s.settimeout(TIMEOUT)
             s.connect((successor["ip"], successor["port"]))
             msg = {"action": "update", "i": i,"event":event}
             
             s.sendall(json.dumps(msg).encode())
             resp = s.recv(4096)
+            print(colored(f">> Response {resp}",'red'))
             
         update_finger_table(i,event)
     except Exception as e:
@@ -245,13 +240,14 @@ def update_next(i,event):
 
 #region update_ring
 def update_ring():
+    global connected
+    connected=nodes_connected(random.randint(1,1000000000))
+    print(colored(f"NODES CONNECTED: {connected}",'cyan'))
+    
     for i in range(1,M):
-        global connected
-        connected=nodes_connected(random.randint(1,1000000000))
-        print(colored(connected,'cyan'))
         if connected-1<2**i:
-            break
-        
+            break    
+        print(colored(f'Sending update on bit {i}','red'))
         event=random.randint(1,1000000000)
         update_next(i,event)
 
@@ -261,26 +257,25 @@ def update_ring():
 
 #region update_finger_table
 def update_finger_table(i,event):
+    print(colored(f">> Updating FT on  {i}",'red'))
     try:
-        
-        print(colored(f">> {i}",'cyan'))
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.settimeout(2)
+            s.settimeout(TIMEOUT)
+            print(colored(f">> Connectin {finger_table[i-1]["ip"]}",'red'))
             s.connect((finger_table[i-1]["ip"], finger_table[i-1]["port"]))
             msg = {"action": "ask", "i": i-1}
             s.sendall(json.dumps(msg).encode())
             resp = s.recv(4096)
             resp=json.loads(resp.decode())
+            
+            print(colored(f">> Response  {resp}",'red'))
             if resp['id']=="-1":
                 return      
-            
-            print(colored(f"asd {resp}",'cyan'))
             
             if len(finger_table)==i:
                 finger_table.append(resp)
             else:
                 finger_table[i]=resp
-            print(colored(f" {i} >> {finger_table[i]}",'cyan'))
     except Exception as e:
         log_message(colored(f"[Chord] Error updateando el finger_table: {e}", "red"))
         
@@ -291,7 +286,7 @@ def join(existing_node: dict):
     global successor,predecessor
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.settimeout(2)
+            s.settimeout(TIMEOUT)
             s.connect((existing_node["ip"], existing_node["port"]))
             msg = {"action": "join", "id": my_node_id}
             s.sendall(json.dumps(msg).encode())
@@ -300,7 +295,6 @@ def join(existing_node: dict):
                 resp = json.loads(resp.decode())
                 succ=resp['successor']
                 pred=resp['predecessor']
-                print(resp)
                 successor = succ
                 predecessor = pred
                 update_successor(predecessor,current)
@@ -377,7 +371,9 @@ def chord_handler(request: dict) -> dict:
         i=request.get('i')
         event=request.get('event')
         update_next(i,event)
+        print_ft()
         return {}
+    
     if action =='nodes_connected':
         event=request.get('event')
         ans=nodes_connected(event)

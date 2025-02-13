@@ -30,28 +30,27 @@ def initialize_global_state():
 
 #region CHORD server
 def chord_server():
-    """
-    Servidor RPC para peticiones Chord. Escucha en HOST:SERVER_PORT y procesa
-    las solicitudes utilizando chord_handler.
-    """
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.bind((HOST, SERVER_PORT))
     s.listen(5)
     log_message(col(f"[Chord] RPC server listening on {HOST}:{SERVER_PORT}", "cyan"))
     while True:
         conn, addr = s.accept()
-        try:
-            data = conn.recv(4096)
-            if data:
-                request = json.loads(data.decode())
-                from .ring import chord_handler, print_ft
-                response = chord_handler(request)
-                conn.sendall(json.dumps(response).encode())
-        except Exception as e:
-            log_message(col(f"[Chord] Error procesando petición de {addr}: {e}", "red"))
-        finally:
-            conn.close()
+        threading.Thread(target=handle_chord_request, args=(conn, addr), daemon=True).start()
 
+def handle_chord_request(conn, addr):
+    try:
+        data = conn.recv(4096)
+        if data:
+            request = json.loads(data.decode())
+            from .ring import chord_handler
+            response = chord_handler(request)
+            conn.sendall(json.dumps(response).encode())
+    except Exception as e:
+        log_message(col(f"[Chord] Error procesando petición de {addr}: {e}", "red"))
+    finally:
+        conn.close()
+        
 #region main
 def main():
     print("______________________________________________________________")
