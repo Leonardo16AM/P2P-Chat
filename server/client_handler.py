@@ -14,7 +14,7 @@ from .ring import find_successor, hash as chord_hash
 from termcolor import colored as col
 
 
-
+#region process_register
 def process_register(message):
     username = message.get("username")
     password = message.get("password")
@@ -42,66 +42,7 @@ def process_register(message):
         log_message(f"Error en register: {e}")
         return {"status": "error", "message": str(e)}
 
-def process_client_message(message, addr):
-    action = message.get("action")
-    if action == "register":
-        return process_register(message)
-    elif action == "login":
-        return process_login(message, addr)
-    elif action == "alive_signal":
-        return process_alive_signal(message, addr)
-    elif action == "get_user":
-        return process_get_user(message)
-    else:
-        log_message(f"Acción no reconocida en petición de cliente: {action}")
-        return {"status": "error", "message": "Acción no reconocida."}
-
-def forward_request_to_node(target_node, message):
-    """
-    Envia la solicitud al nodo especificado y retorna la respuesta.
-    """
-    try:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.settimeout(3)
-            s.connect((target_node["ip"], target_node["port"]))
-            s.sendall(json.dumps(message).encode())
-            response_data = s.recv(4096)
-            return json.loads(response_data.decode())
-    except Exception as e:
-        log_message(f"Error reenviando solicitud a nodo {target_node.get('id')}: {e}")
-        return {"status": "error", "message": "Error comunicándose con el nodo responsable."}
-
-def handle_client(conn, addr):
-    try:
-        data = conn.recv(4096)
-        if not data:
-            return
-        message = json.loads(data.decode())
-        username = message.get("username")
-
-        print(col(f'{message}', 'cyan'))
-
-
-
-        if username:
-            # Se calcula el hash de la clave (username) para determinar el nodo responsable.
-            node_hash = chord_hash(username)
-            responsible = find_successor(node_hash, event=random.randint(1, 1000000000), hard_mode=False)
-            # Si el nodo responsable es el actual, se procesa localmente;
-            # en caso contrario se reenvía la solicitud al nodo responsable.
-            if responsible.get("id") == my_node_id:
-                response = process_client_message(message, addr)
-            else:
-                response = forward_request_to_node(responsible, message)
-        else:
-            response = {"status": "error", "message": "Username no proporcionado."}
-        conn.sendall(json.dumps(response).encode())
-    except Exception as e:
-        log_message(f"Error en handle_client: {e}")
-    finally:
-        conn.close()
-
-
+#region process_login
 def process_login(message, addr):
     """
     Procesa el login de un usuario.
@@ -138,6 +79,7 @@ def process_login(message, addr):
         log_message(f"Error en login: {e}")
         return {"status": "error", "message": str(e)}
 
+#region process_alive_signal
 def process_alive_signal(message, addr):
     """
     Procesa la señal de vida de un cliente.
@@ -160,6 +102,7 @@ def process_alive_signal(message, addr):
         log_message(f"Error en alive_signal: {e}")
         return {"status": "error", "message": str(e)}
 
+#region process_get_user
 def process_get_user(message):
     """
     Consulta y retorna información asociada a un usuario.
@@ -190,3 +133,64 @@ def process_get_user(message):
     except Exception as e:
         log_message(f"Error en get_user: {e}")
         return {"status": "error", "message": str(e)}
+    
+#region process_client_message
+def process_client_message(message, addr):
+    action = message.get("action")
+    if action == "register":
+        return process_register(message)
+    elif action == "login":
+        return process_login(message, addr)
+    elif action == "alive_signal":
+        return process_alive_signal(message, addr)
+    elif action == "get_user":
+        return process_get_user(message)
+    else:
+        log_message(f"Acción no reconocida en petición de cliente: {action}")
+        return {"status": "error", "message": "Acción no reconocida."}
+
+#region forward_request_to_node
+def forward_request_to_node(target_node, message):
+    """
+    Envia la solicitud al nodo especificado y retorna la respuesta.
+    """
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(3)
+            s.connect((target_node["ip"], CLIENT_PORT))
+            s.sendall(json.dumps(message).encode())
+            response_data = s.recv(4096)
+            return json.loads(response_data.decode())
+    except Exception as e:
+        log_message(f"Error reenviando solicitud a nodo {target_node.get('id')}: {e}")
+        return {"status": "error", "message": "Error comunicándose con el nodo responsable."}
+
+
+
+#region handle_client
+def handle_client(conn, addr):
+    try:
+        data = conn.recv(4096)
+        if not data:
+            return
+        message = json.loads(data.decode())
+        username = message.get("username")
+
+        print(col(f'{message}', 'cyan'))
+
+
+
+        if username:
+            node_hash = chord_hash(username)
+            responsible = find_successor(node_hash, event=random.randint(1, 1000000000), hard_mode=False)
+            if responsible["id"] == my_node_id:
+                response = process_client_message(message, addr)
+            else:
+                response = forward_request_to_node(responsible, message)
+        else:
+            response = {"status": "error", "message": "Username no proporcionado."}
+        conn.sendall(json.dumps(response).encode())
+    except Exception as e:
+        log_message(f"Error en handle_client: {e}")
+    finally:
+        conn.close()
