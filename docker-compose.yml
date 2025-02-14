@@ -36,7 +36,9 @@ services:
       - 192.168.1.10
 
   server1:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.server
     image: server-image
     container_name: server1
     environment:
@@ -55,7 +57,9 @@ services:
     #   - "65432:65432" 
 
   server2:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.server
     image: server-image
     container_name: server2
     environment:
@@ -75,7 +79,9 @@ services:
     #   - "65432:65432" 
 
   server3:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.server
     image: server-image
     container_name: server3
     environment:
@@ -95,7 +101,9 @@ services:
     #   - "65432:65432" 
 
   server4:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.server
     image: server-image
     container_name: server4
     environment:
@@ -115,7 +123,9 @@ services:
     #   - "65432:65432" 
 
   server5:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.server
     image: server-image
     container_name: server5
     environment:

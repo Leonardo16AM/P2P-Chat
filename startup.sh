@@ -18,6 +18,8 @@ if [ -z "$choice" ]; then
     docker cp ./server server1:/app
     docker cp ./server server2:/app
     docker cp ./server server3:/app
+    docker cp ./server server4:/app
+    docker cp ./server server5:/app
 
     echo "Contenedores actualizados y reiniciados correctamente."
     exit 0

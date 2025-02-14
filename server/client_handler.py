@@ -1,7 +1,7 @@
 # gestor/client_handler.py
-import socket
-import threading
 import json
+import socket
+import random
 import bcrypt
 import sqlite3
 from datetime import datetime
@@ -9,8 +9,11 @@ from .config import DB_FILE, HOST, CLIENT_PORT
 from .logging import log_message
 from .db import db_lock
 from .replication import replicate_user
-from .ring import get_responsible_node, forward_request_to_node
 from .global_state import my_node_id
+from .ring import find_successor, hash as chord_hash
+from termcolor import colored as col
+
+
 
 def process_register(message):
     username = message.get("username")
@@ -39,133 +42,6 @@ def process_register(message):
         log_message(f"Error en register: {e}")
         return {"status": "error", "message": str(e)}
 
-def process_login(message, addr):
-    username = message.get("username")
-    password = message.get("password")
-    if not username or not password:
-        return {"status": "error", "message": "Faltan campos requeridos."}
-    try:
-        with db_lock:
-            conn = sqlite3.connect(DB_FILE)
-            cursor = conn.cursor()
-            cursor.execute("SELECT status FROM users WHERE username = ?", (username,))
-            row = cursor.fetchone()
-            if row and row[0] == "connected":
-                conn.close()
-                log_message(f"Login fallido: usuario '{username}' ya está conectado.")
-                return {"status": "error", "message": "El usuario ya está conectado."}
-            cursor.execute("SELECT password FROM users WHERE username = ?", (username,))
-            row = cursor.fetchone()
-            if row and bcrypt.checkpw(password.encode(), row[0]):
-                now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                cursor.execute("UPDATE users SET ip = ?, last_update = ?, status = ? WHERE username = ?",
-                               (addr[0], now_str, "connected", username))
-                conn.commit()
-                conn.close()
-                log_message(f"Usuario '{username}' autenticado desde {addr[0]}.")
-                # Replicar los datos del usuario
-                with db_lock:
-                    conn = sqlite3.connect(DB_FILE)
-                    cursor = conn.cursor()
-                    cursor.execute("""
-                        SELECT username, password, ip, public_key, last_update, status 
-                        FROM users WHERE username = ?
-                    """, (username,))
-                    row = cursor.fetchone()
-                    conn.close()
-                if row:
-                    user_record = {
-                        "username": row[0],
-                        "password": row[1].decode() if isinstance(row[1], bytes) else row[1],
-                        "ip": row[2],
-                        "public_key": row[3],
-                        "last_update": row[4],
-                        "status": row[5]
-                    }
-                    replicate_user(user_record)
-                return {"status": "success", "message": "Autenticación exitosa."}
-            else:
-                conn.close()
-                log_message(f"Login fallido: credenciales inválidas para '{username}'.")
-                return {"status": "error", "message": "Credenciales inválidas."}
-    except Exception as e:
-        log_message(f"Error en login: {e}")
-        return {"status": "error", "message": str(e)}
-
-def process_alive_signal(message, addr):
-    username = message.get("username")
-    public_key = message.get("public_key")
-    if not username or not public_key:
-        return {"status": "error", "message": "Faltan campos requeridos."}
-    try:
-        with db_lock:
-            conn = sqlite3.connect(DB_FILE)
-            cursor = conn.cursor()
-            now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            cursor.execute("SELECT username FROM users WHERE username = ?", (username,))
-            if cursor.fetchone():
-                cursor.execute("""
-                    UPDATE users SET ip = ?, public_key = ?, last_update = ?, status = ?
-                    WHERE username = ?
-                """, (addr[0], public_key, now_str, "connected", username))
-                conn.commit()
-                conn.close()
-                log_message(f"Alive_signal recibido para '{username}' desde {addr[0]}.")
-                # Replicación opcional
-                with db_lock:
-                    conn = sqlite3.connect(DB_FILE)
-                    cursor = conn.cursor()
-                    cursor.execute("""
-                        SELECT username, password, ip, public_key, last_update, status 
-                        FROM users WHERE username = ?
-                    """, (username,))
-                    row = cursor.fetchone()
-                    conn.close()
-                if row:
-                    user_record = {
-                        "username": row[0],
-                        "password": row[1].decode() if isinstance(row[1], bytes) else row[1],
-                        "ip": row[2],
-                        "public_key": row[3],
-                        "last_update": row[4],
-                        "status": row[5]
-                    }
-                    replicate_user(user_record)
-                return {"status": "success", "message": "Señal de vida actualizada."}
-            else:
-                conn.close()
-                log_message(f"Alive_signal fallido: usuario '{username}' no registrado.")
-                return {"status": "error", "message": "Usuario no registrado."}
-    except Exception as e:
-        log_message(f"Error en alive_signal: {e}")
-        return {"status": "error", "message": str(e)}
-
-def process_get_user(message):
-    requester = message.get("username")
-    target = message.get("target_username")
-    if not requester or not target:
-        return {"status": "error", "message": "Faltan campos requeridos."}
-    try:
-        with db_lock:
-            conn = sqlite3.connect(DB_FILE)
-            cursor = conn.cursor()
-            cursor.execute("SELECT ip, public_key, last_update, status FROM users WHERE username = ?", (target,))
-            row = cursor.fetchone()
-            conn.close()
-        if row:
-            ip, public_key, last_update, status = row
-            if status != "connected":
-                log_message(f"get_user: '{target}' está desconectado (solicitado por '{requester}').")
-                return {"status": "error", "message": "El usuario está desconectado."}
-            log_message(f"Información de '{target}' enviada a '{requester}'.")
-            return {"status": "success", "ip": ip, "public_key": public_key}
-        else:
-            log_message(f"get_user: usuario '{target}' no encontrado (solicitado por '{requester}').")
-            return {"status": "error", "message": "Usuario no encontrado."}
-    except Exception as e:
-        log_message(f"Error en get_user: {e}")
-        return {"status": "error", "message": str(e)}
-
 def process_client_message(message, addr):
     action = message.get("action")
     if action == "register":
@@ -180,17 +56,40 @@ def process_client_message(message, addr):
         log_message(f"Acción no reconocida en petición de cliente: {action}")
         return {"status": "error", "message": "Acción no reconocida."}
 
-def handle_client(conn, addr, initial_managers):
+def forward_request_to_node(target_node, message):
+    """
+    Envia la solicitud al nodo especificado y retorna la respuesta.
+    """
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(3)
+            s.connect((target_node["ip"], target_node["port"]))
+            s.sendall(json.dumps(message).encode())
+            response_data = s.recv(4096)
+            return json.loads(response_data.decode())
+    except Exception as e:
+        log_message(f"Error reenviando solicitud a nodo {target_node.get('id')}: {e}")
+        return {"status": "error", "message": "Error comunicándose con el nodo responsable."}
+
+def handle_client(conn, addr):
     try:
         data = conn.recv(4096)
         if not data:
             return
         message = json.loads(data.decode())
         username = message.get("username")
+
+        print(col(f'{message}', 'cyan'))
+
+
+
         if username:
-            # Se consulta cuál es el nodo responsable para el usuario
-            responsible = get_responsible_node(username, initial_managers)
-            if responsible.get("node_id") == my_node_id:
+            # Se calcula el hash de la clave (username) para determinar el nodo responsable.
+            node_hash = chord_hash(username)
+            responsible = find_successor(node_hash, event=random.randint(1, 1000000000), hard_mode=False)
+            # Si el nodo responsable es el actual, se procesa localmente;
+            # en caso contrario se reenvía la solicitud al nodo responsable.
+            if responsible.get("id") == my_node_id:
                 response = process_client_message(message, addr)
             else:
                 response = forward_request_to_node(responsible, message)
@@ -202,11 +101,92 @@ def handle_client(conn, addr, initial_managers):
     finally:
         conn.close()
 
-def client_server(initial_managers):
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.bind((HOST, CLIENT_PORT))
-    s.listen()
-    log_message(f"Servidor para clientes iniciado en {HOST}:{CLIENT_PORT}")
-    while True:
-        conn, addr = s.accept()
-        threading.Thread(target=handle_client, args=(conn, addr, initial_managers), daemon=True).start()
+
+def process_login(message, addr):
+    """
+    Procesa el login de un usuario.
+    Verifica las credenciales y actualiza su IP en la base de datos.
+    """
+    username = message.get("username")
+    password = message.get("password")
+    if not username or not password:
+        return {"status": "error", "message": "Faltan campos requeridos."}
+    try:
+        with db_lock:
+            conn = sqlite3.connect(DB_FILE)
+            cursor = conn.cursor()
+            cursor.execute("SELECT password, ip FROM users WHERE username = ?", (username,))
+            row = cursor.fetchone()
+            if row is None:
+                conn.close()
+                log_message(f"Login fallido: usuario '{username}' no existe.")
+                return {"status": "error", "message": "Usuario no encontrado."}
+            stored_password, current_ip = row
+            if not bcrypt.checkpw(password.encode(), stored_password):
+                conn.close()
+                log_message(f"Login fallido: contraseña incorrecta para '{username}'.")
+                return {"status": "error", "message": "Contraseña incorrecta."}
+            # Actualizamos IP del usuario si es necesario (suponiendo que addr[0] es la IP)
+            new_ip = addr[0]
+            cursor.execute("UPDATE users SET ip = ?, last_update = datetime('now'), status = ? WHERE username = ?",
+                           (new_ip, "connected", username))
+            conn.commit()
+            conn.close()
+        log_message(f"Usuario '{username}' inició sesión correctamente desde {new_ip}.")
+        return {"status": "success", "message": "Login exitoso.", "ip": new_ip}
+    except Exception as e:
+        log_message(f"Error en login: {e}")
+        return {"status": "error", "message": str(e)}
+
+def process_alive_signal(message, addr):
+    """
+    Procesa la señal de vida de un cliente.
+    Actualiza el estado del usuario a 'connected' y refresca el 'last_update'.
+    """
+    username = message.get("username")
+    if not username:
+        return {"status": "error", "message": "Username no proporcionado."}
+    try:
+        with db_lock:
+            conn = sqlite3.connect(DB_FILE)
+            cursor = conn.cursor()
+            cursor.execute("UPDATE users SET last_update = datetime('now'), status = ? WHERE username = ?",
+                           ("connected", username))
+            conn.commit()
+            conn.close()
+        log_message(f"Alive_signal recibido para el usuario '{username}' desde {addr[0]}.")
+        return {"status": "success", "message": "Alive signal procesado."}
+    except Exception as e:
+        log_message(f"Error en alive_signal: {e}")
+        return {"status": "error", "message": str(e)}
+
+def process_get_user(message):
+    """
+    Consulta y retorna información asociada a un usuario.
+    """
+    username = message.get("username")
+    if not username:
+        return {"status": "error", "message": "Username no proporcionado."}
+    try:
+        with db_lock:
+            conn = sqlite3.connect(DB_FILE)
+            cursor = conn.cursor()
+            cursor.execute("SELECT username, ip, public_key, last_update, status FROM users WHERE username = ?",
+                           (username,))
+            row = cursor.fetchone()
+            conn.close()
+        if row is None:
+            log_message(f"Consulta get_user: usuario '{username}' no encontrado.")
+            return {"status": "error", "message": "Usuario no encontrado."}
+        user_info = {
+            "username": row[0],
+            "ip": row[1],
+            "public_key": row[2],
+            "last_update": row[3],
+            "status": row[4]
+        }
+        log_message(f"Información consultada para el usuario '{username}'.")
+        return {"status": "success", "user": user_info}
+    except Exception as e:
+        log_message(f"Error en get_user: {e}")
+        return {"status": "error", "message": str(e)}

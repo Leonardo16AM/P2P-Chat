@@ -4,10 +4,10 @@ import threading
 import time
 import sys
 import os
-from .config import HOST, SERVER_PORT
+from .config import HOST, SERVER_PORT, CLIENT_PORT
 from .logging import log_message
 from .db import init_db
-# from .client_handler import client_server
+from .client_handler import handle_client
 # from .server_handler import server_server
 from termcolor import colored as col
 import json
@@ -50,7 +50,27 @@ def handle_chord_request(conn, addr):
         log_message(col(f"[Chord] Error procesando petición de {addr}: {e}", "red"))
     finally:
         conn.close()
-        
+
+# region Client server 
+def client_server():
+    client_port = CLIENT_PORT
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.bind((HOST, client_port))
+    s.listen(5)
+    log_message(col(f"[Client] Server listening on {HOST}:{client_port}", "cyan"))
+    while True:
+        conn, addr = s.accept()
+        log_message(col(f"[Client] Received connection from {addr}", "green"))
+        # Se delega la gestión de la conexión a la función handle_client_request
+        threading.Thread(target=handle_client_request, args=(conn, addr), daemon=True).start()
+
+def handle_client_request(conn, addr):
+    try:
+        # Reutilizamos la función handle_client definida en client_handler.py
+        handle_client(conn, addr)
+    except Exception as e:
+        log_message(col(f"[Client] Error al procesar petición de {addr}: {e}", "red"))
+
 #region main
 def main():
     print("______________________________________________________________")
@@ -78,9 +98,12 @@ def main():
     start_chord_maintenance()
     threading.Thread(target=chord_server, daemon=True).start()
 
+    # Lanzamos en paralelo el servidor para atender peticiones de clientes
+    threading.Thread(target=client_server, daemon=True).start()
+
 
     # Lanzar hilos de escucha
-    # threading.Thread(target=client_server, args=(initial_managers,), daemon=True).start()
+    # threading.Thread(target=client_server, args=(['192.168.1.2'],), daemon=True).start()
     # threading.Thread(target=server_server, daemon=True).start()
     # threading.Thread(target=ring_update_sender, daemon=True).start()
     # threading.Thread(target=find_if_duplicates_are_alive, daemon=True).start()

@@ -1,10 +1,11 @@
-# gestor/replication.py
 import socket
 import json
 import random
+import sqlite3
 from .logging import log_message
-from .config import SERVER_PORT
+from .config import SERVER_PORT, DB_FILE
 from .global_state import initial_managers, my_node_id
+from .db import db_lock
 
 def replicate_user(user_record):
     # Selecciona de forma aleatoria entre los nodos disponibles (excluyendo el propio)
@@ -25,39 +26,43 @@ def replicate_user(user_record):
             log_message(f"Error replicando usuario a nodo {node.get('node_id')}: {e}")
 
 def update_local_user(user_record):
-    # Actualiza (o inserta) en la base de datos local el registro replicado
-    import sqlite3
-    from datetime import datetime
-    from .config import DB_FILE
+    """
+    Actualiza (o inserta) en la base de datos local el registro replicado.
+    Si el usuario ya existe, se actualizan sus datos; de lo contrario, se inserta un nuevo registro.
+    """
     try:
-        username = user_record.get("username")
-        new_time = datetime.strptime(user_record.get("last_update"), "%Y-%m-%d %H:%M:%S")
-    except Exception:
-        new_time = datetime.now()
-    try:
-        conn = sqlite3.connect(DB_FILE)
-        cursor = conn.cursor()
-        cursor.execute("SELECT last_update FROM users WHERE username = ?", (username,))
-        row = cursor.fetchone()
-        if row:
-            old_time = datetime.strptime(row[0], "%Y-%m-%d %H:%M:%S")
-            if new_time > old_time:
+        with db_lock:
+            conn = sqlite3.connect(DB_FILE)
+            cursor = conn.cursor()
+            cursor.execute("SELECT username FROM users WHERE username = ?", (user_record["username"],))
+            existing = cursor.fetchone()
+            if existing:
                 cursor.execute("""
-                    UPDATE users SET password = ?, ip = ?, public_key = ?, last_update = ?, status = ?
+                    UPDATE users
+                    SET password = ?, ip = ?, public_key = ?, last_update = ?, status = ?
                     WHERE username = ?
-                """, (user_record.get("password"), user_record.get("ip"),
-                      user_record.get("public_key"), user_record.get("last_update"),
-                      user_record.get("status"), username))
-                log_message(f"Registro de usuario '{username}' actualizado por réplica.")
-        else:
-            cursor.execute("""
-                INSERT INTO users (username, password, ip, public_key, last_update, status)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (username, user_record.get("password"), user_record.get("ip"),
-                  user_record.get("public_key"), user_record.get("last_update"),
-                  user_record.get("status")))
-            log_message(f"Registro de usuario '{username}' insertado por réplica.")
-        conn.commit()
-        conn.close()
+                """, (
+                    user_record["password"],
+                    user_record["ip"],
+                    user_record["public_key"],
+                    user_record["last_update"],
+                    user_record["status"],
+                    user_record["username"]
+                ))
+            else:
+                cursor.execute("""
+                    INSERT INTO users (username, password, ip, public_key, last_update, status)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, (
+                    user_record["username"],
+                    user_record["password"],
+                    user_record["ip"],
+                    user_record["public_key"],
+                    user_record["last_update"],
+                    user_record["status"]
+                ))
+            conn.commit()
+            conn.close()
+        log_message(f"Usuario replicado '{user_record.get('username')}' actualizado en nodo {my_node_id}.")
     except Exception as e:
-        log_message(f"Error actualizando usuario local por réplica: {e}")
+        log_message(f"Error actualizando usuario replicado '{user_record.get('username')}': {e}")

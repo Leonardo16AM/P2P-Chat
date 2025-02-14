@@ -20,4 +20,6 @@ WORKDIR /app
 COPY ./server /app
 RUN chmod +x ./startup.sh
 
-CMD ["sh", "-c", "/app/startup.sh & wait"]
+# CMD ["sh", "-c", "/app/startup.sh & wait"]
+CMD ["sh", "-c", "/app/startup.sh && tail -f /dev/null"]
+

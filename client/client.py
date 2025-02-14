@@ -755,6 +755,8 @@ def main():
 
     GESTOR_HOST = find_gestor()
 
+    print("aaaaaaaaaaaaaaaaaaab", GESTOR_PORT)
+
     if is_server_active(GESTOR_HOST, GESTOR_PORT):
         print(col("El servidor está activo.", "green"))
     else:
