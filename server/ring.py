@@ -55,7 +55,7 @@ def print_ft():
 #region sanity_check
 def sanity_check():
     while True:
-        print(colored(f" NUMBER OF NODES: {connected}",'green'))
+        print(colored(f" NODES CONNECTED: {connected}",'green'))
         print(colored(f" <<< : {predecessor['ip']}",'green'))
         print(colored(f" >>> : {successor['ip']}",'green'))
         print_list(finger_table,'green')
@@ -386,16 +386,11 @@ def join(existing_node: dict):
     print_ft()
 
 
-def fix_fingers():
-    pass
-
 def stabilize():    
     pass
 
 def check_predecessor():
     pass
-
-    
 
 #region chord_handler
 def chord_handler(request: dict) -> dict:
@@ -484,7 +479,7 @@ def run_fix_fingers():
         update_ring()
 
         if oc!=connected:
-            print(colored(f"NODES CONNECTED: {connected}",'cyan'))
+            print(colored(f" NODES CONNECTED: {connected}",'cyan'))
             while  not update_ring_lock and len(finger_table) and connected-1<2**(len(finger_table)-1): 
                 finger_table.pop(len(finger_table)-1)
             print_ft()
@@ -506,8 +501,6 @@ def run_check_successor():
             successor=find_successor(current['id']+1,rint(),True)
             log_message(colored(f"[Chord] New successor found {successor['ip']}",'magenta'))
             
-            if CHECK_SUCCESSOR_INTERVAL==5:
-                CHECK_SUCCESSOR_INTERVAL=2
             if len(finger_table):
                 finger_table[0]=successor
             else: 
@@ -531,5 +524,5 @@ def start_chord_maintenance():
     threading.Thread(target=run_fix_fingers, daemon=True).start()
     threading.Thread(target=run_check_predecessor, daemon=True).start()
     threading.Thread(target=run_check_successor, daemon=True).start()
-    threading.Thread(target=sanity_check, daemon=True).start()
+    # threading.Thread(target=sanity_check, daemon=True).start()
     log_message(colored("[Chord] Mantenimiento del anillo iniciado (stabilize, fix_fingers, check_predecessor).", "magenta"))
