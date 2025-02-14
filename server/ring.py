@@ -48,16 +48,16 @@ def  ring_init():
 
 #region print_ft
 def print_ft():
-    print(colored(f"<<< : {predecessor['ip']}",'yellow'))
-    print(colored(f">>> : {successor['ip']}",'yellow'))
+    print(colored(f" <<< : {predecessor['ip']}",'yellow'))
+    print(colored(f" >>> : {successor['ip']}",'yellow'))
     print_list(finger_table,'yellow')
 
 #region sanity_check
 def sanity_check():
     while True:
-        print(colored(f"NUMBER OF NODES: {connected}",'green'))
-        print(colored(f"<<< : {predecessor['ip']}",'green'))
-        print(colored(f">>> : {successor['ip']}",'green'))
+        print(colored(f" NUMBER OF NODES: {connected}",'green'))
+        print(colored(f" <<< : {predecessor['ip']}",'green'))
+        print(colored(f" >>> : {successor['ip']}",'green'))
         print_list(finger_table,'green')
         time.sleep(15)
 
@@ -485,7 +485,7 @@ def run_fix_fingers():
 
         if oc!=connected:
             print(colored(f"NODES CONNECTED: {connected}",'cyan'))
-            while  len(finger_table) and connected-1<2**(len(finger_table)-1): 
+            while  not update_ring_lock and len(finger_table) and connected-1<2**(len(finger_table)-1): 
                 finger_table.pop(len(finger_table)-1)
             print_ft()
         time.sleep(FIX_FINGERS_INTERVAL)
@@ -500,11 +500,11 @@ def run_check_successor():
             if(is_alive(successor)):
                 cnt+=1
         if cnt==0:
-            print(colored("Successor disconnected",'red'))
+            log_message(colored("[Chord] Successor disconnected",'red'))
             update_ring_lock=True
 
             successor=find_successor(current['id']+1,rint(),True)
-            print(colored(f"New successor {successor['ip']}",'magenta'))
+            log_message(colored(f"[Chord] New successor found {successor['ip']}",'magenta'))
             
             if CHECK_SUCCESSOR_INTERVAL==5:
                 CHECK_SUCCESSOR_INTERVAL=2
