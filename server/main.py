@@ -31,6 +31,7 @@ def initialize_global_state():
 #region CHORD server
 def chord_server():
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     s.bind((HOST, SERVER_PORT))
     s.listen(5)
     log_message(col(f"[Chord] RPC server listening on {HOST}:{SERVER_PORT}", "cyan"))
@@ -55,6 +56,7 @@ def handle_chord_request(conn, addr):
 def client_server():
     client_port = CLIENT_PORT
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     s.bind((HOST, client_port))
     s.listen(5)
     log_message(col(f"[Client] Server listening on {HOST}:{client_port}", "cyan"))
