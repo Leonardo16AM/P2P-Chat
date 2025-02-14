@@ -9,10 +9,10 @@ from .config import DB_FILE, HOST, CLIENT_PORT
 from .logging import log_message
 from .db import db_lock
 from .replication import replicate_user
-from .global_state import my_node_id
 from .ring import find_successor, hash as chord_hash
 from termcolor import colored as col
 
+import server.global_state as gs
 
 #region process_register
 def process_register(message):
@@ -96,7 +96,7 @@ def process_alive_signal(message, addr):
                            ("connected", username))
             conn.commit()
             conn.close()
-        log_message(f"Alive_signal recibido para el usuario '{username}' desde {addr[0]}.")
+        # log_message(f"Alive_signal recibido para el usuario '{username}' desde {addr[0]}.")
         return {"status": "success", "message": "Alive signal procesado."}
     except Exception as e:
         log_message(f"Error en alive_signal: {e}")
@@ -108,6 +108,8 @@ def process_get_user(message):
     Consulta y retorna información asociada a un usuario.
     """
     username = message.get("username")
+
+    print("usernameeeeeeeeee :" , username)
     if not username:
         return {"status": "error", "message": "Username no proporcionado."}
     try:
@@ -122,14 +124,15 @@ def process_get_user(message):
             log_message(f"Consulta get_user: usuario '{username}' no encontrado.")
             return {"status": "error", "message": "Usuario no encontrado."}
         user_info = {
+            "status": "success",
             "username": row[0],
             "ip": row[1],
             "public_key": row[2],
-            "last_update": row[3],
-            "status": row[4]
+            "last_update": row[3]
         }
         log_message(f"Información consultada para el usuario '{username}'.")
-        return {"status": "success", "user": user_info}
+        print("user info ", user_info)
+        return user_info
     except Exception as e:
         log_message(f"Error en get_user: {e}")
         return {"status": "error", "message": str(e)}
@@ -154,6 +157,7 @@ def forward_request_to_node(target_node, message):
     """
     Envia la solicitud al nodo especificado y retorna la respuesta.
     """
+    print("target node :",target_node)
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.settimeout(3)
@@ -169,6 +173,7 @@ def forward_request_to_node(target_node, message):
 
 #region handle_client
 def handle_client(conn, addr):
+
     try:
         data = conn.recv(4096)
         if not data:
@@ -176,14 +181,11 @@ def handle_client(conn, addr):
         message = json.loads(data.decode())
         username = message.get("username")
 
-        print(col(f'{message}', 'cyan'))
-
-
 
         if username:
             node_hash = chord_hash(username)
             responsible = find_successor(node_hash, event=random.randint(1, 1000000000), hard_mode=False)
-            if responsible["id"] == my_node_id:
+            if responsible["id"] == gs.my_node_id:
                 response = process_client_message(message, addr)
             else:
                 response = forward_request_to_node(responsible, message)
