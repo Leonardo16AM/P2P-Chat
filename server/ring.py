@@ -17,6 +17,26 @@ M=32
 events=set()
 update_ring_lock=False
 
+#region rint
+def rint():
+    return random.randint(1,1000000000)
+
+#region print_list
+def print_list(lista, color):
+    if not lista:
+        return
+
+    max_len = max(len(str(item)) for item in lista)
+    box_width = max_len + 4
+    print(colored("┌" + "─" * (box_width - 2) + "┐", color))
+    
+    for item in lista:
+        item_str = str(item)
+        padding = " " * (box_width - 3 - len(item_str))
+        print(colored("│ " + item_str + padding + "│", color))
+    
+    print(colored("└" + "─" * (box_width - 2) + "┘", color))
+
 
 #region ring_init
 def  ring_init():
@@ -28,14 +48,18 @@ def  ring_init():
 
 #region print_ft
 def print_ft():
-    print(colored('__________________________','yellow'))
-    print(colored(f'<< {predecessor}','yellow'))
-    print(colored(f'>> {successor}','yellow'))
-    for node in finger_table:
-        if node['id']==gs.my_node_id:
-            break;
-        print(colored(f"{node['id']} {node['ip']}",'yellow'))
-    print(colored('__________________________','yellow'))
+    print(colored(f"<<< : {predecessor['ip']}",'yellow'))
+    print(colored(f">>> : {successor['ip']}",'yellow'))
+    print_list(finger_table,'yellow')
+
+#region sanity_check
+def sanity_check():
+    while True:
+        print(colored(f"NUMBER OF NODES: {connected}",'green'))
+        print(colored(f"<<< : {predecessor['ip']}",'green'))
+        print(colored(f">>> : {successor['ip']}",'green'))
+        print_list(finger_table,'green')
+        time.sleep(15)
 
 #region hash
 def hash(key: str) -> int:
@@ -93,9 +117,10 @@ def is_alive(node):
 
 #region find_successor_hard
 def find_successor_hard(id_val,event=-1):
-    list=nodes_connected_list(random.randint(1,1000000000))
+    list=nodes_connected_list(rint())
+
     for i in list:
-        print(colored(i,'magenta'))
+        print(colored(i,'blue'))
 
     list.sort(key=lambda x:x['id'])
 
@@ -140,7 +165,7 @@ def find_successor(id_val,event=-1,hard_mode=0):
 
 #region find_predecessor_hard
 def find_predecessor_hard(id_val,event=-1):
-    list=nodes_connected_list(random.randint(1,1000000000))
+    list=nodes_connected_list(rint())
     for i in list:
         print(colored(i,'magenta'))
 
@@ -243,8 +268,7 @@ def nodes_connected(event=-1):
                 result = json.loads(resp.decode())
                 ans+=result['number']
     except Exception as e:
-        log_message(colored(f"[Chord] Error calculando la cantidad de nodos conectados: {e}", "red"))
-        return 0
+        log_message(colored(f"[Chord] Error calculando la cantidad de nodos conectados: {e} - {successor["ip"]}", "red"))
     return ans
 
 #region update_successor
@@ -277,13 +301,12 @@ def update_predecessor(node,new_predecessor):
 #region update_ring
 def update_ring():
     global connected
-    connected=nodes_connected(random.randint(1,1000000000))
-    print(colored(f"NODES CONNECTED: {connected}",'cyan'))
-    
+    connected=nodes_connected(rint())
+  
     for i in range(1,M):
         if connected-1<2**i:
             break    
-        event=random.randint(1,1000000000)
+        event=rint()
         update_next(i,event)
 
 
@@ -360,6 +383,7 @@ def join(existing_node: dict):
         predecessor = current
         successor = current
     update_ring_lock=False
+    print_ft()
 
 
 def fix_fingers():
@@ -381,8 +405,8 @@ def chord_handler(request: dict) -> dict:
     if action == "join":
         id_val = request.get("id")
         print(colored(f"Joining node {id_val}",'green'))
-        rs = find_successor(id_val,random.randint(1,1000000000),1)
-        rp = find_predecessor(id_val,random.randint(1,1000000000),1)
+        rs = find_successor(id_val,rint(),1)
+        rp = find_predecessor(id_val,rint(),1)
         return {"successor":rs,"predecessor":rp}
     
     if action == "find_successor":
@@ -427,11 +451,11 @@ def chord_handler(request: dict) -> dict:
         i=request.get('i')
         event=request.get('event')
         update_next(i,event)
-        print_ft()
         return {}
     
     if action =='nodes_connected':
         event=request.get('event')
+        import threading
         ans=nodes_connected(event)
         return {"number":ans}
 
@@ -449,16 +473,21 @@ def run_stabilize():
 
 #region run_fix_fingers
 def run_fix_fingers():
+    global connected
     while True:
         if update_ring_lock:
             continue
-
-        connected=nodes_connected(random.randint(1,1000000000))
-        # while connected>=2**(len(finger_table)-1) and len(finger_table):
-        #     finger_table.pop(len(finger_table)-1)
+        
+        oc=connected
+        connected=nodes_connected(rint())
         
         update_ring()
-        print_ft()
+
+        if oc!=connected:
+            print(colored(f"NODES CONNECTED: {connected}",'cyan'))
+            while  len(finger_table) and connected-1<2**(len(finger_table)-1): 
+                finger_table.pop(len(finger_table)-1)
+            print_ft()
         time.sleep(FIX_FINGERS_INTERVAL)
 
 #region run_check_sccessor
@@ -474,7 +503,7 @@ def run_check_successor():
             print(colored("Successor disconnected",'red'))
             update_ring_lock=True
 
-            successor=find_successor(current['id']+1,random.randint(1,1000000000),True)
+            successor=find_successor(current['id']+1,rint(),True)
             print(colored(f"New successor {successor['ip']}",'magenta'))
             
             if CHECK_SUCCESSOR_INTERVAL==5:
@@ -502,4 +531,5 @@ def start_chord_maintenance():
     threading.Thread(target=run_fix_fingers, daemon=True).start()
     threading.Thread(target=run_check_predecessor, daemon=True).start()
     threading.Thread(target=run_check_successor, daemon=True).start()
+    threading.Thread(target=sanity_check, daemon=True).start()
     log_message(colored("[Chord] Mantenimiento del anillo iniciado (stabilize, fix_fingers, check_predecessor).", "magenta"))
