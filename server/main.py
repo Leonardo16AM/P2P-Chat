@@ -7,7 +7,7 @@ import os
 from .config import HOST, SERVER_PORT, CLIENT_PORT
 from .logging import log_message
 from .db import init_db
-from .client_handler import handle_client
+from .client_handler import handle_client, cleanup_users
 # from .server_handler import server_server
 from termcolor import colored as col
 import json
@@ -99,6 +99,7 @@ def main():
     
     threading.Thread(target=chord_server, daemon=True).start()
     threading.Thread(target=client_server, daemon=True).start()
+    threading.Thread(target=cleanup_users, daemon=True).start()
 
 
     # Lanzar hilos de escucha

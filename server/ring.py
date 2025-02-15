@@ -5,8 +5,9 @@ import json
 import random
 from termcolor import colored
 from .logging import log_message
-from .config import SERVER_PORT, RING_UPDATE_INTERVAL, TIMEOUT,FIX_FINGERS_INTERVAL, CHECK_PREDECESSOR_INTERVAL,CHECK_SUCCESSOR_INTERVAL
+from .config import DB_FILE, SERVER_PORT, RING_UPDATE_INTERVAL, TIMEOUT,FIX_FINGERS_INTERVAL, CHECK_PREDECESSOR_INTERVAL,CHECK_SUCCESSOR_INTERVAL
 import server.global_state as gs
+import sqlite3
 
 finger_table=[]
 predecessor=None
@@ -389,8 +390,28 @@ def join(existing_node: dict):
 def stabilize():    
     pass
 
-def check_predecessor():
-    pass
+#region inherit_predecessor
+def inherit_predecessor():
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        if predecessor['id'] < current['id']:
+            query = """
+                INSERT INTO users (username, password, ip, public_key, last_update, status)
+                SELECT username, password, ip, public_key, last_update, status
+                FROM backups
+                WHERE node_id > ? AND node_id <= ?
+            """
+        else:
+            query = """
+                INSERT INTO users (username, password, ip, public_key, last_update, status)
+                SELECT username, password, ip, public_key, last_update, status
+                FROM backups
+                WHERE node_id > ? OR node_id <= ?
+            """
+        params = (predecessor['id'], current['id'])
+        cursor.execute(query, params)
+        conn.commit()
+        conn.close()
 
 #region chord_handler
 def chord_handler(request: dict) -> dict:
@@ -427,6 +448,7 @@ def chord_handler(request: dict) -> dict:
         return {}
     if action=="update_predecessor":
         predecessor=request.get("node")
+        inherit_predecessor()
         print_ft()
         return {}
     
@@ -508,11 +530,6 @@ def run_check_successor():
             update_predecessor(successor,current)
             update_ring_lock=False
 
-#region run_check_predecessor
-def run_check_predecessor():
-    while True:
-        check_predecessor()
-        time.sleep(CHECK_PREDECESSOR_INTERVAL)
 
 #region start_chord_maintenance
 def start_chord_maintenance():
@@ -522,7 +539,6 @@ def start_chord_maintenance():
     import threading
     threading.Thread(target=run_stabilize, daemon=True).start()
     threading.Thread(target=run_fix_fingers, daemon=True).start()
-    threading.Thread(target=run_check_predecessor, daemon=True).start()
     threading.Thread(target=run_check_successor, daemon=True).start()
     # threading.Thread(target=sanity_check, daemon=True).start()
     log_message(colored("[Chord] Mantenimiento del anillo iniciado (stabilize, fix_fingers, check_predecessor).", "magenta"))

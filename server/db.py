@@ -22,5 +22,17 @@ def init_db():
             )
         """)
         conn.commit()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS backups (
+                username TEXT PRIMARY KEY,
+                password BLOB NOT NULL,
+                ip TEXT NOT NULL,
+                public_key TEXT NOT NULL,
+                last_update TEXT NOT NULL,
+                status TEXT NOT NULL,
+                node_id TEXT NOT NULL
+            )
+        """)
+        conn.commit()
         conn.close()
     log_message("Base de datos inicializada.")

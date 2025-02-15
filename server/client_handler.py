@@ -5,14 +5,52 @@ import random
 import bcrypt
 import sqlite3
 from datetime import datetime
-from .config import DB_FILE, HOST, CLIENT_PORT
+from .config import DB_FILE, HOST, CLIENT_PORT, ALIVE_INTERVAL, TIMEOUT
 from .logging import log_message
 from .db import db_lock
 from .replication import replicate_user
 from .ring import find_successor, hash as chord_hash,rint
 from termcolor import colored as col
+from datetime import datetime, timedelta
+import time
 
 import server.global_state as gs
+
+#region cleanup_users
+def cleanup_users():
+    """
+    Actualiza periódicamente el estado de los usuarios inactivos en la base de datos a 'disconnected'.
+
+    Esta función ejecuta un bucle infinito donde se conecta a la base de datos SQLite,
+    verifica los usuarios que han estado inactivos por un tiempo mayor al especificado en TIMEOUT,
+    y actualiza su estado a 'disconnected'. Registra el número de usuarios actualizados y
+    maneja cualquier excepción que ocurra durante el proceso.
+    """
+    while True:
+        try:
+            conn = sqlite3.connect(DB_FILE)
+            cursor = conn.cursor()
+            cutoff = datetime.now() - timedelta(seconds=5)
+            cursor.execute(
+                "UPDATE users SET status = 'disconnected' WHERE last_update < ?",
+                (cutoff,),
+            )
+            updated = cursor.rowcount
+            conn.commit()
+            conn.close()
+            if updated > 0:
+                log_message(
+                    f"\t{updated} usuarios actualizados a estado 'disconnected' por inactividad."
+                )
+            else:
+                from termcolor import colored
+                print(colored("Nadie desconectado",'red'))
+            time.sleep(ALIVE_INTERVAL)
+        except Exception as e:
+            log_message(f"\tError en limpieza de usuarios: {str(e)}")
+            time.sleep(ALIVE_INTERVAL)
+
+
 
 #region process_register
 def process_register(message):
@@ -120,9 +158,16 @@ def process_get_user(message):
                            (username,))
             row = cursor.fetchone()
             conn.close()
+            
         if row is None:
             log_message(f"Consulta get_user: usuario '{username}' no encontrado.")
             return {"status": "error", "message": "Usuario no encontrado."}
+        
+        if row[4] != "connected":
+            conn.close()
+            log_message(f"\tError: El usuario {username} está desconectado.")
+            return {"status": "error", "message": "El usuario está desconectado."}
+        
         user_info = {
             "status": "success",
             "username": row[0],
