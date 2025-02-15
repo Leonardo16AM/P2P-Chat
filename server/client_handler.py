@@ -20,11 +20,6 @@ import server.global_state as gs
 def cleanup_users():
     """
     Actualiza periódicamente el estado de los usuarios inactivos en la base de datos a 'disconnected'.
-
-    Esta función ejecuta un bucle infinito donde se conecta a la base de datos SQLite,
-    verifica los usuarios que han estado inactivos por un tiempo mayor al especificado en TIMEOUT,
-    y actualiza su estado a 'disconnected'. Registra el número de usuarios actualizados y
-    maneja cualquier excepción que ocurra durante el proceso.
     """
     while True:
         try:
@@ -32,7 +27,7 @@ def cleanup_users():
             cursor = conn.cursor()
             cutoff = datetime.now() - timedelta(seconds=5)
             cursor.execute(
-                "UPDATE users SET status = 'disconnected' WHERE last_update < ?",
+                "UPDATE users SET status = 'disconnected' WHERE last_update < ? AND status=='connected'",
                 (cutoff,),
             )
             updated = cursor.rowcount
@@ -42,9 +37,6 @@ def cleanup_users():
                 log_message(
                     f"\t{updated} usuarios actualizados a estado 'disconnected' por inactividad."
                 )
-            else:
-                from termcolor import colored
-                print(colored("Nadie desconectado",'red'))
             time.sleep(ALIVE_INTERVAL)
         except Exception as e:
             log_message(f"\tError en limpieza de usuarios: {str(e)}")
@@ -127,6 +119,21 @@ def process_alive_signal(message, addr):
     if not username:
         return {"status": "error", "message": "Username no proporcionado."}
     try:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT ip FROM users WHERE username = ?",
+            (username,),
+        )
+        row = cursor.fetchone() 
+        if row:
+            ip = row[0]
+        conn.commit()
+        conn.close()
+        if addr[0]!=ip:
+            return {"status": "disconnect", "new_ip": ip}
+
+
         with db_lock:
             conn = sqlite3.connect(DB_FILE)
             cursor = conn.cursor()

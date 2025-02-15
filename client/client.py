@@ -228,6 +228,8 @@ def send_alive_signal(username, public_key_str, stop_event):
                 if response.get("status") == "success":
                     SERVER_UP = True
                     logging.info("Señal de vida enviada exitosamente.")
+                elif response.get("status") == "disconnect":
+                    print(col('Damnnnnn i should probably disconnect!','red'))
                 else:
                     SERVER_UP = False
                     logging.error(f"Error en señal de vida: {response.get('message')}")
