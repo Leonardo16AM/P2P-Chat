@@ -92,12 +92,12 @@ def closest_preceding_finger(id_val: int) -> dict:
     Si no se encuentra, retorna el propio nodo.
     """
     global finger_table
-    for entry in reversed(finger_table):
-        node = entry["node"]
+    for node in reversed(finger_table):
         if in_interval(node["id"], gs.my_node_id, id_val, inclusive_end=False):
             return node
     return current
 
+#region is_alive
 def is_alive(node):
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:

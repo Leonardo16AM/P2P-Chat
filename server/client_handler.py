@@ -9,7 +9,7 @@ from .config import DB_FILE, HOST, CLIENT_PORT
 from .logging import log_message
 from .db import db_lock
 from .replication import replicate_user
-from .ring import find_successor, hash as chord_hash
+from .ring import find_successor, hash as chord_hash,rint
 from termcolor import colored as col
 
 import server.global_state as gs
@@ -107,7 +107,7 @@ def process_get_user(message):
     """
     Consulta y retorna información asociada a un usuario.
     """
-    username = message.get("username")
+    username = message.get("target_username")
 
     print("usernameeeeeeeeee :" , username)
     if not username:
@@ -179,16 +179,31 @@ def handle_client(conn, addr):
         if not data:
             return
         message = json.loads(data.decode())
+        
+        try:
+            if message['action']!='alive_signal':
+                print(col(message,'magenta'))
+        except Exception as e:
+            pass
+        
+        if message.get("ip",-1)==-1:
+            message['ip']=addr[0]
+        else:
+            addr=[message['ip'],addr[1]]
+
         username = message.get("username")
 
-
+            
         if username:
+            if message['action']=='get_user':
+                username=message['target_username']
             node_hash = chord_hash(username)
-            responsible = find_successor(node_hash, event=random.randint(1, 1000000000), hard_mode=False)
+            responsible = find_successor(node_hash, event=rint(), hard_mode=False)
             if responsible["id"] == gs.my_node_id:
                 response = process_client_message(message, addr)
             else:
-                response = forward_request_to_node(responsible, message)
+                response = forward_request_to_node(responsible, message)    
+            print(col(response,'red'))
         else:
             response = {"status": "error", "message": "Username no proporcionado."}
         conn.sendall(json.dumps(response).encode())

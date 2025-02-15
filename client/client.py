@@ -21,7 +21,7 @@ USER_DATA_PATH = "/app/user_data"
 
 
 GESTOR_HOST = "192.168.1.2"
-GESTOR_PORT = 65432
+GESTOR_PORT = 65434
 ALIVE_INTERVAL = 1
 
 PRIVATE_KEY_FILE = "private_key.pem"
@@ -219,7 +219,7 @@ def send_alive_signal(username, public_key_str, stop_event):
                 message = {
                     "action": "alive_signal",
                     "username": username,
-                    "public_key": public_key_str,
+                    "public_key": public_key_str
                 }
                 s.sendall(json.dumps(message).encode())
                 response = s.recv(4096)
