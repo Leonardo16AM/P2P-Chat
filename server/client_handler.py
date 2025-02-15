@@ -9,12 +9,32 @@ from .config import DB_FILE, HOST, CLIENT_PORT, ALIVE_INTERVAL, TIMEOUT
 from .logging import log_message
 from .db import db_lock
 from .replication import replicate_user
-from .ring import find_successor, hash as chord_hash,rint
+from .ring import find_successor, hash as chord_hash,rint, replicate
 from termcolor import colored as col
 from datetime import datetime, timedelta
 import time
 
 import server.global_state as gs
+
+
+#region get_user_data
+def get_user_data(username, table):
+    conn = sqlite3.connect(DB_FILE)
+    conn.row_factory = sqlite3.Row  
+    cursor = conn.cursor()
+
+    query = f"SELECT * FROM {table} WHERE username = ?"
+    
+    try:
+        cursor.execute(query, (username,))
+        row = cursor.fetchone()
+    except sqlite3.Error as e:
+        print(f"Error en la consulta SQL: {e}")
+        row = None
+    finally:
+        conn.close()
+
+    return dict(row) if row else None
 
 #region cleanup_users
 def cleanup_users():
@@ -24,23 +44,34 @@ def cleanup_users():
     while True:
         try:
             conn = sqlite3.connect(DB_FILE)
+            conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
+
             cutoff = datetime.now() - timedelta(seconds=5)
             cursor.execute(
-                "UPDATE users SET status = 'disconnected' WHERE last_update < ? AND status=='connected'",
-                (cutoff,),
+                "SELECT * FROM users WHERE last_update < ? AND status = 'connected'",
+                (cutoff,)
             )
-            updated = cursor.rowcount
-            conn.commit()
-            conn.close()
-            if updated > 0:
-                log_message(
-                    f"\t{updated} usuarios actualizados a estado 'disconnected' por inactividad."
+            users_to_update = cursor.fetchall()
+
+            if users_to_update:
+                cursor.execute(
+                    "UPDATE users SET status = 'disconnected' WHERE last_update < ? AND status = 'connected'",
+                    (cutoff,)
                 )
+                updated = cursor.rowcount
+                conn.commit()
+                
+                users_dict_list = [dict(user) for user in users_to_update]
+                log_message(f"\t{updated} usuarios actualizados a estado 'disconnected' por inactividad.")
+                replicate(users_dict_list)
+
+            conn.close()
             time.sleep(ALIVE_INTERVAL)
         except Exception as e:
             log_message(f"\tError en limpieza de usuarios: {str(e)}")
             time.sleep(ALIVE_INTERVAL)
+
 
 
 
@@ -55,7 +86,8 @@ def process_register(message):
         with db_lock:
             conn = sqlite3.connect(DB_FILE)
             cursor = conn.cursor()
-            hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt())
+            hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode('utf-8')
+
             now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             cursor.execute("""
                 INSERT INTO users (username, password, ip, public_key, last_update, status)
@@ -64,6 +96,7 @@ def process_register(message):
             conn.commit()
             conn.close()
         log_message(f"Usuario '{username}' registrado.")
+        replicate([get_user_data(username,'users')])
         return {"status": "success", "message": "Usuario registrado exitosamente."}
     except sqlite3.IntegrityError:
         log_message(f"Registro fallido: usuario '{username}' ya existe.")
@@ -93,7 +126,8 @@ def process_login(message, addr):
                 log_message(f"Login fallido: usuario '{username}' no existe.")
                 return {"status": "error", "message": "Usuario no encontrado."}
             stored_password, current_ip = row
-            if not bcrypt.checkpw(password.encode(), stored_password):
+
+            if not bcrypt.checkpw(password.encode(), stored_password.encode('utf-8')):
                 conn.close()
                 log_message(f"Login fallido: contraseña incorrecta para '{username}'.")
                 return {"status": "error", "message": "Contraseña incorrecta."}
@@ -103,6 +137,7 @@ def process_login(message, addr):
                            (new_ip, "connected", username))
             conn.commit()
             conn.close()
+        replicate([get_user_data(username,'users')])
         log_message(f"Usuario '{username}' inició sesión correctamente desde {new_ip}.")
         return {"status": "success", "message": "Login exitoso.", "ip": new_ip}
     except Exception as e:

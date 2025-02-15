@@ -8,6 +8,7 @@ from .logging import log_message
 from .config import DB_FILE, SERVER_PORT, RING_UPDATE_INTERVAL, TIMEOUT,FIX_FINGERS_INTERVAL, CHECK_PREDECESSOR_INTERVAL,CHECK_SUCCESSOR_INTERVAL
 import server.global_state as gs
 import sqlite3
+import datetime
 
 finger_table=[]
 predecessor=None
@@ -394,6 +395,7 @@ def stabilize():
 def inherit_predecessor():
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
+        print(colored("INHERITING PREDECESSOR DATA",'magenta'))
         if predecessor['id'] < current['id']:
             query = """
                 INSERT INTO users (username, password, ip, public_key, last_update, status)
@@ -472,9 +474,16 @@ def chord_handler(request: dict) -> dict:
     
     if action =='nodes_connected':
         event=request.get('event')
-        import threading
         ans=nodes_connected(event)
         return {"number":ans}
+
+    if action =='replicate':
+        num=request.get('num')
+        data_list=request.get('data_list')
+        update_values(data_list)
+        if num>1:
+            replicate(data_list,num-1)
+        return {}
 
     elif action == "ping":
         return {"status": "alive"}
@@ -506,6 +515,47 @@ def run_fix_fingers():
                 finger_table.pop(len(finger_table)-1)
             print_ft()
         time.sleep(FIX_FINGERS_INTERVAL)
+
+#region update_values
+def update_values(data_list):
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    print(colored("UPDATING VALUES",'magenta'))
+    print(colored(data_list,'magenta'))
+    
+    for value in data_list:
+        if "node_id" not in value:
+            cursor.execute("""
+                INSERT OR REPLACE INTO users (username, password, ip, public_key, last_update, status)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (value['username'], value['password'], value['ip'], value['public_key'], value['last_update'], value['status']))
+        else:
+            cursor.execute("""
+                INSERT OR REPLACE INTO backups (username, password, ip, public_key, last_update, status, node_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (value['username'], value['password'], value['ip'], value['public_key'], value['last_update'], value['status'], value['node_id']))
+
+    print(colored("UPDATED VALUES",'magenta'))
+    conn.commit()
+    conn.close()
+
+#region replicate
+def replicate(data_list,num=1):
+    num=min(num,connected-1)
+    print(colored(data_list,'red'))
+    if len(data_list)==1 and 'node_id' not in data_list[0]:
+        data_list[0]['node_id']=gs.my_node_id
+        print("REPLICATING ")
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(TIMEOUT)
+                s.connect((successor["ip"], successor["port"]))
+                msg = {"action": "replicate", "num": num, "data_list":data_list}
+                s.sendall(json.dumps(msg).encode())
+                resp = s.recv(4096)
+        except Exception as e:
+            log_message(colored(f"[Chord] Error iniciando replicacion: {e}", "red"))
+    
 
 #region run_check_sccessor
 def run_check_successor():
