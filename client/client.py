@@ -28,6 +28,7 @@ PRIVATE_KEY_FILE = "private_key.pem"
 PUBLIC_KEY_FILE = "public_key.pem"
 
 stop_event = threading.Event()
+loguedout=False
 
 logging.basicConfig(
     filename="client.log",
@@ -212,6 +213,7 @@ def send_alive_signal(username, public_key_str, stop_event):
     global SERVER_UP
 
     while not stop_event.is_set():
+        global loguedout
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 s.settimeout(1)
@@ -229,7 +231,10 @@ def send_alive_signal(username, public_key_str, stop_event):
                     SERVER_UP = True
                     logging.info("Señal de vida enviada exitosamente.")
                 elif response.get("status") == "disconnect":
-                    print(col('Damnnnnn i should probably disconnect!','red'))
+                    print(col('Another client connected. Logging out.','red'))
+                    loguedout=True
+                    logout()
+                    return
                 else:
                     SERVER_UP = False
                     logging.error(f"Error en señal de vida: {response.get('message')}")
@@ -753,11 +758,9 @@ def update_cached_ip(username, ip):
 
 # region main
 def main():
-    global GESTOR_HOST, stop_event
+    global GESTOR_HOST, stop_event,loguedout
 
     GESTOR_HOST = find_gestor()
-
-    print("aaaaaaaaaaaaaaaaaaab", GESTOR_PORT)
 
     if is_server_active(GESTOR_HOST, GESTOR_PORT):
         print(col("El servidor está activo.", "green"))
@@ -809,6 +812,10 @@ def main():
                 alive_thread.start()
 
                 while True:
+                    if loguedout:
+                        loguedout=False
+                        break
+
                     print("\nOpciones disponibles:")
                     print("\t1. Consultar usuario")
                     print("\t2. Enviar mensaje")
@@ -816,6 +823,10 @@ def main():
                     print("\t4. Abrir un chat")
                     print("\t5. Cerrar sesión")
                     sub_choice = input("Opción: ")
+                    
+                    if loguedout:
+                        loguedout=False
+                        break
 
                     if sub_choice == "1":
                         if is_server_active(GESTOR_HOST, GESTOR_PORT):
