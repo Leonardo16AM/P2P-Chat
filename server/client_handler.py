@@ -8,7 +8,6 @@ from datetime import datetime
 from .config import DB_FILE, HOST, CLIENT_PORT, ALIVE_INTERVAL, TIMEOUT
 from .logging import log_message
 from .db import db_lock
-from .replication import replicate_user
 from .ring import find_successor, hash as chord_hash,rint, replicate
 from termcolor import colored as col
 from datetime import datetime, timedelta
