@@ -5,7 +5,7 @@ import json
 import random
 from termcolor import colored
 from .logging import log_message
-from .config import DB_FILE, SERVER_PORT, RING_UPDATE_INTERVAL, TIMEOUT,FIX_FINGERS_INTERVAL, CHECK_PREDECESSOR_INTERVAL,CHECK_SUCCESSOR_INTERVAL
+from .config import DB_FILE, SERVER_PORT, RING_UPDATE_INTERVAL, TIMEOUT,FIX_FINGERS_INTERVAL, CHECK_PREDECESSOR_INTERVAL,CHECK_SUCCESSOR_INTERVAL,NUM_OF_REPLICAS
 import server.global_state as gs
 import sqlite3
 import datetime
@@ -259,18 +259,21 @@ def nodes_connected(event=-1):
     events.add(event)
     
     ans=1
-    try:    
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.settimeout(TIMEOUT)
-            s.connect((successor["ip"], successor["port"]))
-            msg = {"action": "nodes_connected","event":event}
-            s.sendall(json.dumps(msg).encode())
-            resp = s.recv(4096)
-            if resp:
-                result = json.loads(resp.decode())
-                ans+=result['number']
-    except Exception as e:
-        log_message(colored(f"[Chord] Error calculando la cantidad de nodos conectados: {e} - {successor["ip"]}", "red"))
+    
+    for node in finger_table:
+        try:    
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(TIMEOUT)
+                s.connect((node["ip"], node["port"]))
+                msg = {"action": "nodes_connected","event":event}
+                s.sendall(json.dumps(msg).encode())
+                resp = s.recv(4096)
+                if resp:
+                    result = json.loads(resp.decode())
+                    ans+=result['number']
+        except Exception as e:
+            pass
+            # log_message(colored(f"[Chord] Error calculando la cantidad de nodos conectados: {e} - {successor["ip"]}", "red"))
     return ans
 
 #region update_successor
@@ -391,29 +394,6 @@ def join(existing_node: dict):
 def stabilize():    
     pass
 
-#region inherit_predecessor
-def inherit_predecessor():
-        conn = sqlite3.connect(DB_FILE)
-        cursor = conn.cursor()
-        print(colored("INHERITING PREDECESSOR DATA",'magenta'))
-        if predecessor['id'] < current['id']:
-            query = """
-                INSERT INTO users (username, password, ip, public_key, last_update, status)
-                SELECT username, password, ip, public_key, last_update, status
-                FROM backups
-                WHERE node_id > ? AND node_id <= ?
-            """
-        else:
-            query = """
-                INSERT INTO users (username, password, ip, public_key, last_update, status)
-                SELECT username, password, ip, public_key, last_update, status
-                FROM backups
-                WHERE node_id > ? OR node_id <= ?
-            """
-        params = (predecessor['id'], current['id'])
-        cursor.execute(query, params)
-        conn.commit()
-        conn.close()
 
 #region chord_handler
 def chord_handler(request: dict) -> dict:
@@ -516,8 +496,41 @@ def run_fix_fingers():
             print_ft()
         time.sleep(FIX_FINGERS_INTERVAL)
 
+#region inherit_predecessor
+def inherit_predecessor():
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    print(colored("INHERITING PREDECESSOR DATA", 'magenta'))
+
+    if predecessor['id'] < current['id']:
+        query = """
+            INSERT INTO users (username, password, ip, public_key, last_update, status)
+            SELECT username, password, ip, public_key, last_update, status
+            FROM backups
+            WHERE node_id > ? AND node_id <= ?
+            RETURNING username, password, ip, public_key, last_update, status
+        """
+    else:
+        query = """
+            INSERT INTO users (username, password, ip, public_key, last_update, status)
+            SELECT username, password, ip, public_key, last_update, status
+            FROM backups
+            WHERE node_id > ? OR node_id <= ?
+            RETURNING username, password, ip, public_key, last_update, status
+        """
+    
+    params = (predecessor['id'], current['id'])
+    cursor.execute(query, params)
+    new_data = cursor.fetchall()  
+    conn.commit()
+    replicate(new_data, NUM_OF_REPLICAS)
+    conn.close()
+
 #region update_values
 def update_values(data_list):
+    if not len(data_list):
+        return
+    
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     print(colored("UPDATING VALUES",'magenta'))
@@ -540,12 +553,15 @@ def update_values(data_list):
     conn.close()
 
 #region replicate
-def replicate(data_list,num=1):
+def replicate(data_list,num=NUM_OF_REPLICAS):
+    if not len(data_list):
+        return
     num=min(num,connected-1)
     print(colored(data_list,'red'))
-    if len(data_list)==1 and 'node_id' not in data_list[0]:
-        data_list[0]['node_id']=gs.my_node_id
-        print("REPLICATING ")
+    print(f"REPLICATING {num}")
+    if len(data_list)==1 :
+        if 'node_id' not in data_list[0]:
+            data_list[0]['node_id']=gs.my_node_id
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 s.settimeout(TIMEOUT)
@@ -555,7 +571,20 @@ def replicate(data_list,num=1):
                 resp = s.recv(4096)
         except Exception as e:
             log_message(colored(f"[Chord] Error iniciando replicacion: {e}", "red"))
-    
+    else:
+        for node in data_list:
+            if 'node_id' not in node:
+                node['node_id']=gs.my_node_id
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(TIMEOUT)
+                s.connect((successor["ip"], successor["port"]))
+                msg = {"action": "replicate", "num": num, "data_list":data_list}
+                s.sendall(json.dumps(msg).encode())
+                resp = s.recv(4096)
+        except Exception as e:
+            log_message(colored(f"[Chord] Error iniciando replicacion: {e}", "red"))
+
 
 #region run_check_sccessor
 def run_check_successor():

@@ -7,6 +7,8 @@ CLIENT_PORT = 65434       # Para la comunicación con clientes
 SERVER_PORT = 65433       # Para la comunicación entre gestores
 TIMEOUT=20
 
+NUM_OF_REPLICAS=2
+
 # Intervalos (en segundos)
 ALIVE_INTERVAL = 1
 RING_UPDATE_INTERVAL = 5
