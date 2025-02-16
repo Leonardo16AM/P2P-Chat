@@ -103,4 +103,4 @@ Las sesiones están protegidas mediante un nombre de usuario único y una contra
 Algunos preguntas que pudieran ser importantes en cuanto a la seguridad son:
 
 - ¿Qué pasa si un nodo externo maligno se intenta unir al anillo de Chord? Para esto se planea implementar algun patrón de verificación, tal que si un nodo se conecta es porque es confiable.
-- ¿Si un ataque se apodera de un nodo, es posible sacarlo del anillo? En este casose podría crear un mecanismo para que lo notifique como Nodo eliminado, lo cual haría que cambiaran las Finger Tables, y además que su contenido se replicara automáticamente en otro nodo.
+- ¿Si un ataque se apodera de un nodo, es posible sacarlo del anillo? En este caso se podría crear un mecanismo para que lo notifique como Nodo eliminado, lo cual haría que cambiaran las Finger Tables, y además que su contenido se replicara automáticamente en otro nodo.
