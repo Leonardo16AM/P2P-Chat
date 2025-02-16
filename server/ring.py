@@ -380,6 +380,35 @@ def join(existing_node: dict):
                 VERBOSE and print(colored(resp,'magenta'))
                 finger_table.append(successor)
                 log_message(colored(f"[Chord] Nodo unido al anillo. Sucesor asignado: {successor['id']}", "green"))
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(TIMEOUT)
+                s.connect((successor["ip"], successor["port"]))
+                msg = {"action": "to_predecessor"}
+                s.sendall(json.dumps(msg).encode())
+                resp = s.recv(4096)
+                resp=json.loads(resp.decode())
+                
+                conn = sqlite3.connect(DB_FILE)
+                cursor = conn.cursor()
+                VERBOSE and print(colored(f"INSERTING VALUES FROM SUCCESSOR\n{resp}",'magenta'))
+                for value in resp:
+                    if "node_id" not in value:
+                        cursor.execute("""
+                            INSERT OR REPLACE INTO users (username, password, ip, public_key, last_update, status)
+                            VALUES (?, ?, ?, ?, ?, ?)
+                        """, (value['username'], value['password'], value['ip'], value['public_key'], value['last_update'], value['status']))
+                    else:
+                        cursor.execute("""
+                            INSERT OR REPLACE INTO backups (username, password, ip, public_key, last_update, status, node_id)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                        """, (value['username'], value['password'], value['ip'], value['public_key'], value['last_update'], value['status'], value['node_id']))
+                conn.commit()
+                conn.close()
+                full_replicate()
+                
+        except Exception as e:
+            log_message(colored(f"[Chord] Error obteniendo datos desde el sucessor: {e}", "red"))
 
     except Exception as e:
         log_message(colored(f"[Chord] Error en join() con nodo existente: {e}. Se arranca como nodo inicial.", "red"))
@@ -428,7 +457,6 @@ def chord_handler(request: dict) -> dict:
         return {}
     if action=="update_predecessor":
         predecessor=request.get("node")
-        inherit_predecessor()
         print_ft()
         return {}
     
@@ -454,7 +482,15 @@ def chord_handler(request: dict) -> dict:
         event=request.get('event')
         ans=nodes_connected(event)
         return {"number":ans}
-
+    
+    if action=='inherit_predecessor':
+        inherit_predecessor()
+        return{}
+    if action =='to_predecessor':
+        ret=to_predecessor()
+        VERBOSE and print(colored(f"TRANSFERING TO THE PREDECESSOR:\n {ret}",'magenta'))
+        return ret
+    
     if action =='replicate':
         num=request.get('num')
         data_list=request.get('data_list')
@@ -493,6 +529,79 @@ def run_fix_fingers():
                 finger_table.pop(len(finger_table)-1)
             print_ft()
         time.sleep(FIX_FINGERS_INTERVAL)
+
+#region to_predecessor
+def to_predecessor():
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    conn.create_function("hash", 1, hash)
+    log_message(colored("SENDING DATA TO PREDECESSOR", 'magenta'))
+
+    if predecessor['id'] < current['id']:
+        query = """
+            SELECT username, password, ip, public_key, last_update, status
+            FROM users
+            WHERE hash(username) <= ? OR hash(username) > ?
+        """
+    else:
+        query = """
+            SELECT username, password, ip, public_key, last_update, status
+            FROM users
+            WHERE hash(username) <= ? AND hash(username) > ?
+        """
+    
+    params = (predecessor['id'], current['id'])
+    cursor.execute(query, params)
+    new_data = cursor.fetchall()
+    
+    data_dict = []
+    for data in new_data:
+        data_dict.append({
+            'username': data[0],
+            'password': data[1],
+            'ip': data[2],
+            'public_key': data[3],
+            'last_update': data[4],
+            'status': data[5]
+        })
+
+    backup_query = """
+        SELECT username, password, ip, public_key, last_update, status, node_id
+        FROM backups
+    """
+    cursor.execute(backup_query)
+    backups_data = cursor.fetchall()
+    
+    for data in backups_data:
+        data_dict.append({
+            'username': data[0],
+            'password': data[1],
+            'ip': data[2],
+            'public_key': data[3],
+            'last_update': data[4],
+            'status': data[5],
+            'node_id': data[6]
+        })
+
+    delete_query = (
+        """
+        DELETE FROM users
+        WHERE hash(username) <= ? OR hash(username) > ?
+        """
+        if predecessor['id'] < current['id'] else
+        """
+        DELETE FROM users
+        WHERE hash(username) <= ? AND hash(username) > ?
+        """
+    )
+    
+    cursor.execute(delete_query, params)
+    conn.commit()
+    conn.close()
+    
+    return data_dict
+
+
 
 #region inherit_predecessor
 def inherit_predecessor():
@@ -553,6 +662,29 @@ def update_values(data_list):
     conn.commit()
     conn.close()
 
+#region full_replicate
+def full_replicate():
+    VERBOSE and print(colored("DOING A FULL REPLICATION",'magenta'))
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    query = """
+        SELECT username, password, ip, public_key, last_update, status
+        FROM users
+    """
+    cursor.execute(query)
+    users_data = cursor.fetchall()
+    data_list=[]
+    for data in users_data:
+        data_list.append({
+            'username': data[0],
+            'password': data[1],
+            'ip': data[2],
+            'public_key': data[3],
+            'last_update': data[4],
+            'status': data[5]
+        })
+    replicate(data_list)
+
 #region replicate
 def replicate(data_list,num=NUM_OF_REPLICAS):
     if not len(data_list):
@@ -607,6 +739,15 @@ def run_check_successor():
             else: 
                 finger_table.append(successor)
             update_predecessor(successor,current)
+            try:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    s.settimeout(TIMEOUT)
+                    s.connect((successor["ip"], successor["port"]))
+                    msg = {"action": "inherit_predecessor"}
+                    s.sendall(json.dumps(msg).encode())
+                    resp = s.recv(4096)
+            except Exception as e:
+                log_message(colored(f"[Chord] Error mandando al nuevo sucesor a heredar datos del antiguo: {e}", "red"))
             update_ring_lock=False
 
 
