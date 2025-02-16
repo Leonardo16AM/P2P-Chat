@@ -39,6 +39,52 @@ def print_list(lista, color):
     
     print(colored("└" + "─" * (box_width - 2) + "┘", color))
 
+#region print_db
+def print_db():
+    with gs.db_lock:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        cursor.execute("SELECT username, ip, status FROM users")
+        users = cursor.fetchall()
+        cursor.execute("SELECT username, ip, status, node_id FROM backups")
+        backups = cursor.fetchall()
+        conn.close()
+
+    users_table = []
+    users_table.append(["Usuario", "IP", "Status"])
+    for username, ip, status in users:
+        users_table.append([username, ip, status])
+
+    backups_table = []
+    backups_table.append(["Usuario", "IP", "Status", "Node ID"])
+    for username, ip, status, node_id in backups:
+        backups_table.append([username, ip, status, node_id])
+
+    def print_section(table_data, color):
+        col_widths = [
+            max(len(str(row[i])) for row in table_data)
+            for i in range(len(table_data[0]))
+        ]
+        row_format = "│ " + " │ ".join("{:" + str(width) + "}" for width in col_widths) + " │"
+
+        def border_line(left, mid, right):
+            pieces = [ "─" * (width + 2) for width in col_widths ]
+            return left + mid.join(pieces) + right
+
+        top_border = border_line("┌", "┬", "┐")
+        header_sep = border_line("├", "┼", "┤")
+        bottom_border = border_line("└", "┴", "┘")
+
+        print(colored(top_border, color))
+        print(colored(row_format.format(*table_data[0]), color))
+        print(colored(header_sep, color))
+        for row in table_data[1:]:
+            print(colored(row_format.format(*row), color))
+        print(colored(bottom_border, color))
+
+    print_section(users_table, "blue")
+    print_section(backups_table, "cyan")
+
 
 #region ring_init
 def  ring_init():
@@ -389,24 +435,25 @@ def join(existing_node: dict):
                 resp = s.recv(4096)
                 resp=json.loads(resp.decode())
                 
-                conn = sqlite3.connect(DB_FILE)
-                cursor = conn.cursor()
-                VERBOSE and print(colored(f"INSERTING VALUES FROM SUCCESSOR\n{resp}",'magenta'))
-                for value in resp:
-                    if "node_id" not in value:
-                        cursor.execute("""
-                            INSERT OR REPLACE INTO users (username, password, ip, public_key, last_update, status)
-                            VALUES (?, ?, ?, ?, ?, ?)
-                        """, (value['username'], value['password'], value['ip'], value['public_key'], value['last_update'], value['status']))
-                    else:
-                        cursor.execute("""
-                            INSERT OR REPLACE INTO backups (username, password, ip, public_key, last_update, status, node_id)
-                            VALUES (?, ?, ?, ?, ?, ?, ?)
-                        """, (value['username'], value['password'], value['ip'], value['public_key'], value['last_update'], value['status'], value['node_id']))
-                conn.commit()
-                conn.close()
+                with gs.db_lock:
+                    conn = sqlite3.connect(DB_FILE)
+                    cursor = conn.cursor()
+                    VERBOSE and print(colored(f"INSERTING VALUES FROM SUCCESSOR\n{resp}",'magenta'))
+                    for value in resp:
+                        if "node_id" not in value:
+                            cursor.execute("""
+                                INSERT OR REPLACE INTO users (username, password, ip, public_key, last_update, status)
+                                VALUES (?, ?, ?, ?, ?, ?)
+                            """, (value['username'], value['password'], value['ip'], value['public_key'], value['last_update'], value['status']))
+                        else:
+                            cursor.execute("""
+                                INSERT OR REPLACE INTO backups (username, password, ip, public_key, last_update, status, node_id)
+                                VALUES (?, ?, ?, ?, ?, ?, ?)
+                            """, (value['username'], value['password'], value['ip'], value['public_key'], value['last_update'], value['status'], value['node_id']))
+                    conn.commit()
+                    conn.close()
                 full_replicate()
-                
+                VERBOSE and print_db()
         except Exception as e:
             log_message(colored(f"[Chord] Error obteniendo datos desde el sucessor: {e}", "red"))
 
@@ -485,6 +532,7 @@ def chord_handler(request: dict) -> dict:
     
     if action=='inherit_predecessor':
         inherit_predecessor()
+        VERBOSE and print_db()
         return{}
     if action =='to_predecessor':
         ret=to_predecessor()
@@ -497,6 +545,7 @@ def chord_handler(request: dict) -> dict:
         update_values(data_list)
         if num>1:
             replicate(data_list,num-1)
+        VERBOSE and print_db()
         return {}
 
     elif action == "ping":
@@ -532,72 +581,74 @@ def run_fix_fingers():
 
 #region to_predecessor
 def to_predecessor():
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    conn.create_function("hash", 1, hash)
-    log_message(colored("SENDING DATA TO PREDECESSOR", 'magenta'))
+    
+    with gs.db_lock:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        conn.create_function("hash", 1, hash)
+        log_message(colored("SENDING DATA TO PREDECESSOR", 'magenta'))
 
-    if predecessor['id'] < current['id']:
-        query = """
-            SELECT username, password, ip, public_key, last_update, status
-            FROM users
+        if predecessor['id'] < current['id']:
+            query = """
+                SELECT username, password, ip, public_key, last_update, status
+                FROM users
+                WHERE hash(username) <= ? OR hash(username) > ?
+            """
+        else:
+            query = """
+                SELECT username, password, ip, public_key, last_update, status
+                FROM users
+                WHERE hash(username) <= ? AND hash(username) > ?
+            """
+        
+        params = (predecessor['id'], current['id'])
+        cursor.execute(query, params)
+        new_data = cursor.fetchall()
+        
+        data_dict = []
+        for data in new_data:
+            data_dict.append({
+                'username': data[0],
+                'password': data[1],
+                'ip': data[2],
+                'public_key': data[3],
+                'last_update': data[4],
+                'status': data[5]
+            })
+
+        backup_query = """
+            SELECT username, password, ip, public_key, last_update, status, node_id
+            FROM backups
+        """
+        cursor.execute(backup_query)
+        backups_data = cursor.fetchall()
+        
+        for data in backups_data:
+            data_dict.append({
+                'username': data[0],
+                'password': data[1],
+                'ip': data[2],
+                'public_key': data[3],
+                'last_update': data[4],
+                'status': data[5],
+                'node_id': data[6]
+            })
+
+        delete_query = (
+            """
+            DELETE FROM users
             WHERE hash(username) <= ? OR hash(username) > ?
-        """
-    else:
-        query = """
-            SELECT username, password, ip, public_key, last_update, status
-            FROM users
+            """
+            if predecessor['id'] < current['id'] else
+            """
+            DELETE FROM users
             WHERE hash(username) <= ? AND hash(username) > ?
-        """
-    
-    params = (predecessor['id'], current['id'])
-    cursor.execute(query, params)
-    new_data = cursor.fetchall()
-    
-    data_dict = []
-    for data in new_data:
-        data_dict.append({
-            'username': data[0],
-            'password': data[1],
-            'ip': data[2],
-            'public_key': data[3],
-            'last_update': data[4],
-            'status': data[5]
-        })
-
-    backup_query = """
-        SELECT username, password, ip, public_key, last_update, status, node_id
-        FROM backups
-    """
-    cursor.execute(backup_query)
-    backups_data = cursor.fetchall()
-    
-    for data in backups_data:
-        data_dict.append({
-            'username': data[0],
-            'password': data[1],
-            'ip': data[2],
-            'public_key': data[3],
-            'last_update': data[4],
-            'status': data[5],
-            'node_id': data[6]
-        })
-
-    delete_query = (
-        """
-        DELETE FROM users
-        WHERE hash(username) <= ? OR hash(username) > ?
-        """
-        if predecessor['id'] < current['id'] else
-        """
-        DELETE FROM users
-        WHERE hash(username) <= ? AND hash(username) > ?
-        """
-    )
-    
-    cursor.execute(delete_query, params)
-    conn.commit()
-    conn.close()
+            """
+        )
+        
+        cursor.execute(delete_query, params)
+        conn.commit()
+        conn.close()
     
     return data_dict
 
@@ -605,73 +656,80 @@ def to_predecessor():
 
 #region inherit_predecessor
 def inherit_predecessor():
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    log_message(colored("INHERITING PREDECESSOR DATA", 'magenta'))
+    with gs.db_lock:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        log_message(colored("INHERITING PREDECESSOR DATA", 'magenta'))
 
-    if predecessor['id'] < current['id']:
-        query = """
-            INSERT INTO users (username, password, ip, public_key, last_update, status)
-            SELECT username, password, ip, public_key, last_update, status
-            FROM backups
-            WHERE node_id > ? AND node_id <= ?
-            RETURNING username, password, ip, public_key, last_update, status
-        """
-    else:
-        query = """
-            INSERT INTO users (username, password, ip, public_key, last_update, status)
-            SELECT username, password, ip, public_key, last_update, status
-            FROM backups
-            WHERE node_id > ? OR node_id <= ?
-            RETURNING username, password, ip, public_key, last_update, status
-        """
-    
-    params = (predecessor['id'], current['id'])
-    cursor.execute(query, params)
-    new_data = cursor.fetchall()  
-    data_dict=[]
-    for data in new_data:
-        data_dict.append({'username': data[0], 'password':data[1] , 'ip': data[2], 'public_key': data[3], 
-                          'last_update':data[4], 'status':data[5], 'node_id': current['id']})
-    conn.commit()
+        if predecessor['id'] < current['id']:
+            query = """
+                INSERT INTO users (username, password, ip, public_key, last_update, status)
+                SELECT username, password, ip, public_key, last_update, status
+                FROM backups
+                WHERE node_id > ? AND node_id <= ?
+                RETURNING username, password, ip, public_key, last_update, status
+            """
+        else:
+            query = """
+                INSERT INTO users (username, password, ip, public_key, last_update, status)
+                SELECT username, password, ip, public_key, last_update, status
+                FROM backups
+                WHERE node_id > ? OR node_id <= ?
+                RETURNING username, password, ip, public_key, last_update, status
+            """
+        
+        params = (predecessor['id'], current['id'])
+        cursor.execute(query, params)
+        new_data = cursor.fetchall()  
+        data_dict=[]
+        for data in new_data:
+            data_dict.append({'username': data[0], 'password':data[1] , 'ip': data[2], 'public_key': data[3], 
+                            'last_update':data[4], 'status':data[5], 'node_id': current['id']})
+        conn.commit()
+        conn.close()
     replicate(data_dict, NUM_OF_REPLICAS)
-    conn.close()
 
 #region update_values
 def update_values(data_list):
     if not len(data_list):
         return
     
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    VERBOSE and print(colored("UPDATING VALUES",'magenta'))
-    VERBOSE and print(colored(data_list,'magenta'))
-    
-    for value in data_list:
-        if "node_id" not in value:
-            cursor.execute("""
-                INSERT OR REPLACE INTO users (username, password, ip, public_key, last_update, status)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (value['username'], value['password'], value['ip'], value['public_key'], value['last_update'], value['status']))
-        else:
-            cursor.execute("""
-                INSERT OR REPLACE INTO backups (username, password, ip, public_key, last_update, status, node_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (value['username'], value['password'], value['ip'], value['public_key'], value['last_update'], value['status'], value['node_id']))
+    with gs.db_lock:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        VERBOSE and print(colored("UPDATING VALUES",'magenta'))
+        VERBOSE and print(colored(data_list,'magenta'))
+        
+        for value in data_list:
+            if "node_id" not in value:
+                cursor.execute("""
+                    INSERT OR REPLACE INTO users (username, password, ip, public_key, last_update, status)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, (value['username'], value['password'], value['ip'], value['public_key'], value['last_update'], value['status']))
+            else:
+                cursor.execute("""
+                    INSERT OR REPLACE INTO backups (username, password, ip, public_key, last_update, status, node_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (value['username'], value['password'], value['ip'], value['public_key'], value['last_update'], value['status'], value['node_id']))
 
-    conn.commit()
-    conn.close()
+        conn.commit()
+        conn.close()
 
 #region full_replicate
 def full_replicate():
     VERBOSE and print(colored("DOING A FULL REPLICATION",'magenta'))
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    query = """
-        SELECT username, password, ip, public_key, last_update, status
-        FROM users
-    """
-    cursor.execute(query)
+    
+    with gs.db_lock:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        query = """
+            SELECT username, password, ip, public_key, last_update, status
+            FROM users
+        """
+        cursor.execute(query)    
+        conn.commit()
+        conn.close()
+        
     users_data = cursor.fetchall()
     data_list=[]
     for data in users_data:
@@ -687,7 +745,7 @@ def full_replicate():
 
 #region replicate
 def replicate(data_list,num=NUM_OF_REPLICAS):
-    if not len(data_list):
+    if not len(data_list) or num<=0:
         return
     num=min(num,connected-1)
     VERBOSE and print(colored(data_list,'red')) 
@@ -749,6 +807,7 @@ def run_check_successor():
             except Exception as e:
                 log_message(colored(f"[Chord] Error mandando al nuevo sucesor a heredar datos del antiguo: {e}", "red"))
             update_ring_lock=False
+            print_db()
 
 
 #region start_chord_maintenance
