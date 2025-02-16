@@ -5,10 +5,10 @@ import json
 import random
 from termcolor import colored
 from .logging import log_message
-from .config import DB_FILE, SERVER_PORT, RING_UPDATE_INTERVAL, TIMEOUT,FIX_FINGERS_INTERVAL, CHECK_PREDECESSOR_INTERVAL,CHECK_SUCCESSOR_INTERVAL,NUM_OF_REPLICAS
+from .config import VERBOSE,DB_FILE, SERVER_PORT, RING_UPDATE_INTERVAL, TIMEOUT,FIX_FINGERS_INTERVAL, CHECK_PREDECESSOR_INTERVAL,CHECK_SUCCESSOR_INTERVAL,NUM_OF_REPLICAS
 import server.global_state as gs
 import sqlite3
-import datetime
+import threading
 
 finger_table=[]
 predecessor=None
@@ -50,16 +50,14 @@ def  ring_init():
 
 #region print_ft
 def print_ft():
-    print(colored(f" <<< : {predecessor['ip']}",'yellow'))
-    print(colored(f" >>> : {successor['ip']}",'yellow'))
+    print(colored(f" {predecessor['ip']}  <<>>  {successor['ip']}",'yellow'))
     print_list(finger_table,'yellow')
 
 #region sanity_check
 def sanity_check():
     while True:
         print(colored(f" NODES CONNECTED: {connected}",'green'))
-        print(colored(f" <<< : {predecessor['ip']}",'green'))
-        print(colored(f" >>> : {successor['ip']}",'green'))
+        print(colored(f" {predecessor['ip']}  <<>>  {successor['ip']}",'green'))
         print_list(finger_table,'green')
         time.sleep(15)
 
@@ -122,7 +120,7 @@ def find_successor_hard(id_val,event=-1):
     list=nodes_connected_list(rint())
 
     for i in list:
-        print(colored(i,'blue'))
+        VERBOSE and print(colored(i,'blue'))
 
     list.sort(key=lambda x:x['id'])
 
@@ -169,13 +167,13 @@ def find_successor(id_val,event=-1,hard_mode=0):
 def find_predecessor_hard(id_val,event=-1):
     list=nodes_connected_list(rint())
     for i in list:
-        print(colored(i,'magenta'))
+        VERBOSE and print(colored(i,'magenta'))
 
     list.sort(key=lambda x:x['id'])
     list.reverse()
 
     for i in list:
-        print(colored(i['ip'],'cyan'))
+        VERBOSE and print(colored(i['ip'],'cyan'))
     for i in list:
         if i['id']<id_val:
             return i
@@ -379,7 +377,7 @@ def join(existing_node: dict):
                 update_successor(predecessor,current)
                 update_predecessor(successor,current)
 
-                print(colored(resp,'magenta'))
+                VERBOSE and print(colored(resp,'magenta'))
                 finger_table.append(successor)
                 log_message(colored(f"[Chord] Nodo unido al anillo. Sucesor asignado: {successor['id']}", "green"))
 
@@ -500,7 +498,7 @@ def run_fix_fingers():
 def inherit_predecessor():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    print(colored("INHERITING PREDECESSOR DATA", 'magenta'))
+    log_message(colored("INHERITING PREDECESSOR DATA", 'magenta'))
 
     if predecessor['id'] < current['id']:
         query = """
@@ -522,8 +520,12 @@ def inherit_predecessor():
     params = (predecessor['id'], current['id'])
     cursor.execute(query, params)
     new_data = cursor.fetchall()  
+    data_dict=[]
+    for data in new_data:
+        data_dict.append({'username': data[0], 'password':data[1] , 'ip': data[2], 'public_key': data[3], 
+                          'last_update':data[4], 'status':data[5], 'node_id': current['id']})
     conn.commit()
-    replicate(new_data, NUM_OF_REPLICAS)
+    replicate(data_dict, NUM_OF_REPLICAS)
     conn.close()
 
 #region update_values
@@ -533,8 +535,8 @@ def update_values(data_list):
     
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    print(colored("UPDATING VALUES",'magenta'))
-    print(colored(data_list,'magenta'))
+    VERBOSE and print(colored("UPDATING VALUES",'magenta'))
+    VERBOSE and print(colored(data_list,'magenta'))
     
     for value in data_list:
         if "node_id" not in value:
@@ -548,7 +550,6 @@ def update_values(data_list):
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             """, (value['username'], value['password'], value['ip'], value['public_key'], value['last_update'], value['status'], value['node_id']))
 
-    print(colored("UPDATED VALUES",'magenta'))
     conn.commit()
     conn.close()
 
@@ -557,8 +558,8 @@ def replicate(data_list,num=NUM_OF_REPLICAS):
     if not len(data_list):
         return
     num=min(num,connected-1)
-    print(colored(data_list,'red'))
-    print(f"REPLICATING {num}")
+    VERBOSE and print(colored(data_list,'red')) 
+    VERBOSE and print(f"REPLICATING {num}")
     if len(data_list)==1 :
         if 'node_id' not in data_list[0]:
             data_list[0]['node_id']=gs.my_node_id
@@ -584,7 +585,6 @@ def replicate(data_list,num=NUM_OF_REPLICAS):
                 resp = s.recv(4096)
         except Exception as e:
             log_message(colored(f"[Chord] Error iniciando replicacion: {e}", "red"))
-
 
 #region run_check_sccessor
 def run_check_successor():
@@ -615,7 +615,6 @@ def start_chord_maintenance():
     """
     Lanza en hilos separados las funciones de estabilización, fix_fingers y check_predecessor.
     """
-    import threading
     threading.Thread(target=run_stabilize, daemon=True).start()
     threading.Thread(target=run_fix_fingers, daemon=True).start()
     threading.Thread(target=run_check_successor, daemon=True).start()

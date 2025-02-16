@@ -7,6 +7,7 @@ CLIENT_PORT = 65434       # Para la comunicación con clientes
 SERVER_PORT = 65433       # Para la comunicación entre gestores
 TIMEOUT=20
 
+VERBOSE=True
 NUM_OF_REPLICAS=2
 
 # Intervalos (en segundos)
