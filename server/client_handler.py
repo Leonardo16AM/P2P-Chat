@@ -144,11 +144,13 @@ def process_login(message, addr):
         log_message(f"Error en login: {e}")
         return {"status": "error", "message": str(e)}
 
-#region process_alive_signal
+# region process_alive_signal
 def process_alive_signal(message, addr):
     """
     Procesa la señal de vida de un cliente.
     Actualiza el estado del usuario a 'connected' y refresca el 'last_update'.
+    Si la IP del cliente (addr[0]) no coincide con la registrada, se devuelve
+    un response con status "disconnect", la nueva IP y una bandera para la transferencia de datos.
     """
     username = message.get("username")
     if not username:
@@ -156,18 +158,14 @@ def process_alive_signal(message, addr):
     try:
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
-        cursor.execute(
-            "SELECT ip FROM users WHERE username = ?",
-            (username,),
-        )
-        row = cursor.fetchone() 
+        cursor.execute("SELECT ip FROM users WHERE username = ?", (username,))
+        row = cursor.fetchone()
         if row:
             ip = row[0]
         conn.commit()
         conn.close()
-        if addr[0]!=ip:
-            return {"status": "disconnect", "new_ip": ip}
-
+        if addr[0] != ip:
+            return {"status": "disconnect", "new_ip": ip, "action": "transfer_data"}
 
         with db_lock:
             conn = sqlite3.connect(DB_FILE)
@@ -176,11 +174,12 @@ def process_alive_signal(message, addr):
                            ("connected", username))
             conn.commit()
             conn.close()
-        # log_message(f"Alive_signal recibido para el usuario '{username}' desde {addr[0]}.")
         return {"status": "success", "message": "Alive signal procesado."}
     except Exception as e:
         log_message(f"Error en alive_signal: {e}")
         return {"status": "error", "message": str(e)}
+
+
 
 #region process_get_user
 def process_get_user(message):

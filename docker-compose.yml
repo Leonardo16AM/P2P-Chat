@@ -1,8 +1,8 @@
 version: '3.8'
 
-volumes:
-  user_data:
-    driver: local
+# volumes:
+#   user_data:
+#     driver: local
 
 networks:
   server_network:
@@ -144,13 +144,11 @@ services:
     # ports:
     #   - "65432:65432" 
 
-
-
   client1:
     image: client-image
     container_name: client1
-    volumes:
-      - user_data:/app/user_data
+    # volumes:
+    #   - user_data:/app/user_data
     networks:
       client_network:
         ipv4_address: 192.168.2.2
@@ -167,8 +165,8 @@ services:
   client2:
     image: client-image
     container_name: client2
-    volumes:
-      - user_data:/app/user_data
+    # volumes:
+    #   - user_data:/app/user_data
     networks:
       client_network:
         ipv4_address: 192.168.2.3
@@ -185,8 +183,8 @@ services:
   client3:
     image: client-image
     container_name: client3
-    volumes:
-      - user_data:/app/user_data
+    # volumes:
+    #   - user_data:/app/user_data
     networks:
       client_network:
         ipv4_address: 192.168.2.4

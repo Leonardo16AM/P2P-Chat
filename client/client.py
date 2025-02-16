@@ -199,16 +199,6 @@ def stop_all_threads():
 
 # region alive
 def send_alive_signal(username, public_key_str, stop_event):
-    """
-    Envía una señal de vida al servidor a intervalos regulares para indicar que el cliente sigue activo.
-
-    La función intenta conectarse al servidor especificado por GESTOR_HOST y GESTOR_PORT, y envía un mensaje JSON
-    con la acción "alive_signal", el nombre de usuario y la clave pública. Si la respuesta del servidor indica éxito,
-    se establece SERVER_UP a True. En caso de error, se intenta encontrar un nuevo gestor y actualizar GESTOR_HOST.
-
-    La función se ejecuta en un bucle hasta que se establece el evento stop_event o se alcanza el tiempo de espera
-    especificado por ALIVE_INTERVAL.
-    """
     global GESTOR_HOST
     global SERVER_UP
 
@@ -231,21 +221,23 @@ def send_alive_signal(username, public_key_str, stop_event):
                     SERVER_UP = True
                     logging.info("Señal de vida enviada exitosamente.")
                 elif response.get("status") == "disconnect":
-                    print(col('Another client connected. Logging out.','red'))
+                    new_ip = response.get("new_ip")
+                    print(col("Otro cliente se ha conectado. Transfiriendo datos al nuevo cliente...", "red"))
+                    transfer_local_data(new_ip, CLIENT_PORT)
+                    print(col('Cerrando sesión...', 'red'))
+                    print('Presione enter para continuar...')
                     loguedout=True
-                    logout()
+                    logout()  # Simula el cierre de sesión en el cliente antiguo
                     return
                 else:
                     SERVER_UP = False
                     logging.error(f"Error en señal de vida: {response.get('message')}")
-
         except socket.timeout:
             logging.warning("Operación de socket agotó el tiempo de espera.")
             SERVER_UP = False
         except Exception as e:
             SERVER_UP = False
             logging.error(f"Error al enviar señal de vida: {str(e)}")
-
             gestor_ip = find_gestor()
             if gestor_ip:
                 GESTOR_HOST = gestor_ip
@@ -258,6 +250,57 @@ def send_alive_signal(username, public_key_str, stop_event):
             break
 
     logging.info("Hilo send_alive_signal finalizado.")
+
+
+
+
+def transfer_local_data(new_ip, port, retries=3, delay=2):
+    """
+    Extrae los datos locales (chats, mensajes y mensajes pendientes)
+    y los envía al nuevo cliente, que escucha en el puerto 'port'.
+    
+    En caso de error de conexión (p.ej. Connection Refused), reintenta la conexión
+    'retries' veces con un retraso de 'delay' segundos entre intentos.
+    """
+    try:
+        # Extraer datos de la base de datos local
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM chats")
+        chats = cursor.fetchall()
+        cursor.execute("SELECT * FROM messages")
+        messages = cursor.fetchall()
+        cursor.execute("SELECT * FROM pending_messages")
+        pending = cursor.fetchall()
+        conn.close()
+
+        data = {
+            "action": "transfer_data",
+            "chats": chats,
+            "messages": messages,
+            "pending": pending
+        }
+    except Exception as e:
+        print(col(f"Error al extraer datos locales: {e}", "red"))
+        return
+
+    attempt = 0
+    while attempt < retries:
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(5)
+                s.connect((new_ip, port))
+                s.sendall(json.dumps(data).encode())
+                print(col("Datos transferidos al nuevo cliente.", "green"))
+                return  # Salimos si la transferencia es exitosa
+        except Exception as e:
+            attempt += 1
+            print(col(f"Error en transferencia de datos (intento {attempt}): {e}", "red"))
+            time.sleep(delay)
+    
+    print(col("No se pudo transferir los datos tras varios intentos.", "red"))
+
+
 
 
 # region user_query
@@ -559,43 +602,29 @@ def start_message_listener(username):
                 try:
                     conn, addr = server_socket.accept()
                     with conn:
-                        try:
-                            message_data = conn.recv(BUFFER_SIZE).decode()
-                            message_json = json.loads(message_data)
+                        message_data = conn.recv(BUFFER_SIZE).decode()
+                        message_json = json.loads(message_data)
 
-                            if message_json.get("action") == "who_is_connected":
-                                conn.sendall(
-                                    json.dumps({"username": username}).encode()
-                                )
-                                continue
+                        if message_json.get("action") == "who_is_connected":
+                            conn.sendall(json.dumps({"username": username}).encode())
+                            continue
+                        elif message_json.get("action") == "transfer_data":
+                            merge_local_data(message_json)
+                            continue
 
-                            sender = message_json.get("sender")
-                            content = message_json.get("content")
+                        sender = message_json.get("sender")
+                        content = message_json.get("content")
+                        if not sender or not content:
+                            continue
 
-                            if not sender or not content:
-                                continue
-
-                            print(col(f"Nuevo mensaje de {sender}: {content}", "cyan"))
-                            update_cached_ip(sender, addr[0])
-
-                            chat_id = get_or_create_chat(sender)
-                            save_message(chat_id, sender, content, delivered=True)
-                        except json.JSONDecodeError:
-                            print(
-                                col(
-                                    f"Error al decodificar el mensaje de {addr[0]}",
-                                    "red",
-                                )
-                            )
-                        except Exception as e:
-                            print(
-                                col(
-                                    f"Error al procesar mensaje de {addr[0]}: {str(e)}",
-                                    "red",
-                                )
-                            )
+                        print(col(f"Nuevo mensaje de {sender}: {content}", "cyan"))
+                        update_cached_ip(sender, addr[0])
+                        chat_id = get_or_create_chat(sender)
+                        save_message(chat_id, sender, content, delivered=True)
                 except socket.timeout:
                     continue
+                except Exception as e:
+                    print(col(f"Error al procesar mensaje: {str(e)}", "red"))
 
             logging.info("Hilo message_listener finalizado.")
 
@@ -605,6 +634,44 @@ def start_message_listener(username):
 
     listener_thread = threading.Thread(target=listen, daemon=True)
     listener_thread.start()
+
+
+def merge_local_data(data):
+    """
+    Fusiona los datos transferidos (chats, mensajes y mensajes pendientes)
+    en la base de datos local del nuevo cliente.
+    """
+    try:
+        chats = data.get("chats", [])
+        messages = data.get("messages", [])
+        pending = data.get("pending", [])
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+
+        # Insertar o actualizar chats
+        for chat in chats:
+            # Se asume que chat es una tupla: (id, username, last_message, last_timestamp)
+            username = chat[1]
+            cursor.execute("SELECT id FROM chats WHERE username = ?", (username,))
+            if cursor.fetchone() is None:
+                cursor.execute("INSERT INTO chats (username, last_message, last_timestamp) VALUES (?, ?, ?)",
+                               (chat[1], chat[2], chat[3]))
+        # Insertar mensajes
+        for msg in messages:
+            # Se asume que msg es una tupla: (id, chat_id, sender, message, timestamp, delivered)
+            cursor.execute("INSERT INTO messages (chat_id, sender, message, timestamp, delivered) VALUES (?, ?, ?, ?, ?)",
+                           (msg[1], msg[2], msg[3], msg[4], msg[5]))
+        # Insertar mensajes pendientes
+        for p in pending:
+            # Se asume que p es una tupla: (id, sender, receiver, message, timestamp)
+            cursor.execute("INSERT INTO pending_messages (sender, receiver, message, timestamp) VALUES (?, ?, ?, ?)",
+                           (p[1], p[2], p[3], p[4]))
+        conn.commit()
+        conn.close()
+        print(col("Datos transferidos y fusionados en el nuevo cliente.", "green"))
+    except Exception as e:
+        print(col(f"Error al fusionar datos: {e}", "red"))
+
 
 
 # region pending messages
