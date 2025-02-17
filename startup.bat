@@ -13,6 +13,7 @@ if "%choice%"=="" (
     docker cp ./client client1:/app
     docker cp ./client client2:/app
     docker cp ./client client3:/app
+    docker cp ./router router:/app
     docker cp ./server server1:/app
     docker cp ./server server2:/app
     docker cp ./server server3:/app

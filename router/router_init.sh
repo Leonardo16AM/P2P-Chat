@@ -4,38 +4,35 @@
 echo "Habilitando el reenvío de IP..."
 sysctl -w net.ipv4.ip_forward=1
 
-# Limpiar las reglas existentes de iptables
-echo "Limpiando las reglas existentes de iptables..."
+# Limpiar reglas existentes de iptables
+echo "Limpiando reglas existentes de iptables..."
 iptables -F
 iptables -t nat -F
 iptables -X
 iptables -t nat -X
 
-# Determinar las interfaces asociadas con las redes Docker
-echo "Determinando las interfaces de red..."
+# Determinar las interfaces asociadas con las redes internas
+echo "Determinando interfaces de red..."
 SERVER_INTERFACE=$(ip route | grep "192.168.1.0/24" | awk '{print $3}')
 CLIENT_INTERFACE=$(ip route | grep "192.168.2.0/24" | awk '{print $3}')
 
 echo "Interfaz del servidor: $SERVER_INTERFACE"
 echo "Interfaz del cliente: $CLIENT_INTERFACE"
 
-# Validar que se encontraron las interfaces
 if [ -z "$SERVER_INTERFACE" ] || [ -z "$CLIENT_INTERFACE" ]; then
   echo "Error: No se pudieron determinar las interfaces de red. Saliendo."
   exit 1
 fi
 
-# Configurar las reglas de reenvío
+# Configurar reglas de reenvío entre las redes internas
 echo "Configurando reglas de reenvío..."
-# Permitir tráfico de CLIENT a SERVER
 iptables -A FORWARD -i "$CLIENT_INTERFACE" -o "$SERVER_INTERFACE" -s 192.168.2.0/24 -d 192.168.1.0/24 -j ACCEPT
-# Permitir tráfico establecido y relacionado de SERVER a CLIENT
-iptables -A FORWARD -i "$SERVER_INTERFACE" -o "$CLIENT_INTERFACE" -m state --state ESTABLISHED,RELATED -j ACCEPT
+iptables -A FORWARD -i "$SERVER_INTERFACE" -o "$CLIENT_INTERFACE" -s 192.168.1.0/24 -d 192.168.2.0/24 -j ACCEPT
+iptables -A FORWARD -m state --state ESTABLISHED,RELATED -j ACCEPT
 
-# Identificar la interfaz que conecta a Internet
+# Identificar la interfaz de Internet
 echo "Identificando la interfaz de Internet..."
 INTERNET_INTERFACE=$(ip route | grep default | awk '{print $5}')
-
 echo "Interfaz de Internet: $INTERNET_INTERFACE"
 
 if [ -z "$INTERNET_INTERFACE" ]; then
@@ -43,42 +40,36 @@ if [ -z "$INTERNET_INTERFACE" ]; then
   exit 1
 fi
 
-# Aplicar MASQUERADE solo para el tráfico que va hacia Internet
-echo "Aplicando MASQUERADE solo para tráfico hacia Internet..."
+# Configurar NAT
+echo "Configurando NAT para diferenciar tráfico interno e Internet..."
+
+# --- Excluir tráfico interno de NAT ---
+# Excluir tráfico multicast en puerto 10003
+iptables -t nat -I POSTROUTING 1 -s 192.168.1.0/24 -p udp --dport 10003 -j RETURN
+iptables -t nat -I POSTROUTING 1 -s 192.168.2.0/24 -p udp --dport 10003 -j RETURN
+
+# Excluir tráfico interno entre las dos redes
+iptables -t nat -I POSTROUTING 1 -s 192.168.1.0/24 -d 192.168.2.0/24 -j RETURN
+iptables -t nat -I POSTROUTING 1 -s 192.168.2.0/24 -d 192.168.1.0/24 -j RETURN
+
+# --- Aplicar MASQUERADE únicamente para tráfico hacia Internet ---
 iptables -t nat -A POSTROUTING -o "$INTERNET_INTERFACE" -j MASQUERADE
 
-# Permitir tráfico DNS entre redes internas
-echo "Asegurando el tráfico DNS..."
-iptables -A FORWARD -i "$CLIENT_INTERFACE" -o "$SERVER_INTERFACE" -p udp --dport 53 -j ACCEPT
-iptables -A FORWARD -i "$CLIENT_INTERFACE" -o "$SERVER_INTERFACE" -p tcp --dport 53 -j ACCEPT
-
-# Asegurar que el tráfico DDNS hacia y desde 192.168.1.10 funcione correctamente
-echo "Asegurando el tráfico DDNS hacia y desde 192.168.1.10..."
-# Definir el puerto utilizado por DDNS
-DDNS_PORT=8245  # Reemplaza con el puerto correcto si es diferente
-
-# Permitir tráfico entrante al DDNS desde la red cliente
-iptables -A FORWARD -i "$CLIENT_INTERFACE" -o "$SERVER_INTERFACE" -d 192.168.1.10 -p tcp --dport "$DDNS_PORT" -j ACCEPT
-iptables -A FORWARD -i "$CLIENT_INTERFACE" -o "$SERVER_INTERFACE" -d 192.168.1.10 -p udp --dport "$DDNS_PORT" -j ACCEPT
-
-# Permitir tráfico saliente desde el DDNS hacia la red cliente (respuestas)
-iptables -A FORWARD -i "$SERVER_INTERFACE" -o "$CLIENT_INTERFACE" -s 192.168.1.10 -p tcp --sport "$DDNS_PORT" -j ACCEPT
-iptables -A FORWARD -i "$SERVER_INTERFACE" -o "$CLIENT_INTERFACE" -s 192.168.1.10 -p udp --sport "$DDNS_PORT" -j ACCEPT
-
-# Opcional: Permitir tráfico ICMP (ping) entre redes
-echo "Permitiendo tráfico ICMP (ping) entre redes..."
+# (Opcional) Permitir tráfico ICMP para pruebas de conectividad
+echo "Permitiendo tráfico ICMP (ping)..."
 iptables -A FORWARD -i "$CLIENT_INTERFACE" -o "$SERVER_INTERFACE" -p icmp -j ACCEPT
 iptables -A FORWARD -i "$SERVER_INTERFACE" -o "$CLIENT_INTERFACE" -p icmp -j ACCEPT
 
-# Opcional: Registrar intentos de conexión para depuración
-# echo "Registrando intentos de conexión..."
-# iptables -A FORWARD -j LOG --log-prefix "IPTables-FORWARD: " --log-level 4
-
-# Información de depuración
+# Mostrar reglas para depuración
 echo "Reglas actuales de iptables (FILTER):"
 iptables -L -v -n
-echo "Reglas NAT actuales:"
+echo "Reglas actuales de iptables (NAT):"
 iptables -t nat -L -v -n
+
+# Agregar ruta multicast y ejecutar proxy (ajusta según corresponda)
+sleep 5
+ip route add 224.0.0.0/4 dev "$SERVER_INTERFACE"
+python /app/multicast_proxy.py
 
 # Mantener el contenedor en ejecución
 echo "Configuración del router completada. Manteniendo el contenedor en ejecución..."

@@ -1,9 +1,10 @@
-FROM alpine AS runtime
+FROM python:3-alpine AS runtime
 
 RUN apk update && apk add procps iptables iproute2
 RUN echo "net.ipv4.ip_forward=1" >> /etc/sysctl.conf
 
 COPY ./router/router_init.sh /router_init.sh
+COPY ./router/multicast_proxy.py /multicast_proxy.py
 RUN chmod +x /router_init.sh
 
 CMD ["/bin/sh", "/router_init.sh"]

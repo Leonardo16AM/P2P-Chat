@@ -11,6 +11,7 @@ import logging
 from termcolor import colored as col
 import sqlite3
 import sys
+import struct
 
 SERVER_UP = True
 BROADCAST_PORT = 55555
@@ -37,29 +38,51 @@ logging.basicConfig(
 )
 
 
-def find_gestor():
-    return "192.168.1.2"
-    """Descubre la dirección IP del gestor mediante broadcast."""
-    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP) as s:
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        s.settimeout(5)
+def discover_servers(timeout=3):
+    """
+    Envía una petición multicast para descubrir servidores y espera respuestas.
 
-        broadcast_message = b"DISCOVER_GESTOR"
-        gestor_ip = None
+    :param timeout: Tiempo máximo (en segundos) para esperar respuestas.
+    :return: Lista con las IPs de los servidores descubiertos.
+    """
+    MCAST_GRP = '224.0.0.1'
+    MCAST_PORT = 10003
+    MESSAGE = "DISCOVER_SERVER"
+    BUFFER_SIZE = 1024
 
+    # Crear socket UDP para enviar y recibir
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+    sock.settimeout(timeout)
+
+    # Configurar TTL del paquete multicast
+    ttl = struct.pack('b', 1)
+    sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, ttl)
+
+    # Enviar la petición multicast
+    try:
+        sock.sendto(MESSAGE.encode(), (MCAST_GRP, MCAST_PORT))
+    except Exception as e:
+        print(f"Error enviando el mensaje multicast: {e}")
+        return []
+
+    servers = []
+    start_time = time.time()
+    while True:
         try:
-            logging.info("Enviando broadcast para descubrir gestor...")
-            s.sendto(broadcast_message, ("<broadcast>", BROADCAST_PORT))
-
-            # Esperar respuesta
-            data, addr = s.recvfrom(BUFFER_SIZE)
-            gestor_ip = data.decode()
-            logging.info(f"Gestor descubierto en {gestor_ip} (desde {addr})")
+            data, addr = sock.recvfrom(BUFFER_SIZE)
+            server_ip = data.decode().strip()
+            servers.append(server_ip)
+            print(f"Servidor descubierto: {server_ip} (respuesta desde {addr})")
         except socket.timeout:
-            logging.warning("No se recibió respuesta del gestor.")
+            break
         except Exception as e:
-            logging.error(f"Error al buscar el gestor: {e}")
-        return gestor_ip
+            print(f"Error recibiendo datos: {e}")
+            break
+        if time.time() - start_time > timeout:
+            break
+
+    sock.close()
+    return servers
 
 
 def is_server_active(host, port):
@@ -238,7 +261,11 @@ def send_alive_signal(username, public_key_str, stop_event):
         except Exception as e:
             SERVER_UP = False
             logging.error(f"Error al enviar señal de vida: {str(e)}")
-            gestor_ip = find_gestor()
+            gestor_ip=False
+            try:
+                gestor_ip = discover_servers()[0]
+            except Exception as e:
+                pass
             if gestor_ip:
                 GESTOR_HOST = gestor_ip
                 SERVER_UP = True
@@ -756,8 +783,6 @@ def check_and_send_pending_messages(username):
 
 
 # region send_message_to_ip
-
-
 def send_message_to_ip(ip, sender, receiver, message_content):
     """Intenta conectar y enviar un mensaje al destinatario en una IP específica usando dos conexiones."""
     try:
@@ -822,12 +847,29 @@ def update_cached_ip(username, ip):
     cache[username] = ip
     # print(col(f"IP cacheada para {username} actualizada a {ip}.", "blue"))
 
+def connect_to_server():
+    global SERVER_UP,GESTOR_HOST
+    while True:
+        time.sleep(5)
+        if not is_server_active(GESTOR_HOST, GESTOR_PORT):
+            SERVER_UP=False
+            try:
+                GESTOR_HOST = discover_servers()[0]
+                print(col(f"NEW SERVER FOUND {GESTOR_HOST}",'green'))
+                SERVER_UP=True
+            except Exception as e:
+                pass
 
 # region main
 def main():
     global GESTOR_HOST, stop_event,loguedout
-
-    GESTOR_HOST = find_gestor()
+    threading.Thread(target=connect_to_server, daemon=True).start()
+    
+    try:
+        GESTOR_HOST = discover_servers()[0]
+        print(col(f"FOUND SERVER ON:{GESTOR_HOST}",'green'))
+    except Exception as e:
+        GESTOR_HOST='192.168.1.2'
 
     if is_server_active(GESTOR_HOST, GESTOR_PORT):
         print(col("El servidor está activo.", "green"))

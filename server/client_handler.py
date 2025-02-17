@@ -288,7 +288,6 @@ def handle_client(conn, addr):
                 response = process_client_message(message, addr)
             else:
                 response = forward_request_to_node(responsible, message)    
-            print(col(response,'red'))
         else:
             response = {"status": "error", "message": "Username no proporcionado."}
         conn.sendall(json.dumps(response).encode())
