@@ -848,6 +848,25 @@ def join(existing_node: dict) -> None:
 def stabilize():
     pass
 
+#region node_info
+def node_info():
+    ret={}
+    ret['id']=current['id']
+    ret['ip']=current['ip']
+    ret['ft']=finger_table
+    ret['su']=successor['ip']
+    ret['pr']=predecessor['ip']
+    with gs.db_lock:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        cursor.execute("SELECT username, ip, status FROM users")
+        users = cursor.fetchall()
+        cursor.execute("SELECT username, ip, status, node_id FROM backups")
+        backups = cursor.fetchall()
+        conn.close()
+    ret['usr']=users
+    ret['bck']=backups
+    return ret
 
 # region chord_handler
 def chord_handler(request: dict) -> dict:
@@ -1029,7 +1048,11 @@ def chord_handler(request: dict) -> dict:
             replicate(data_list, num - 1)
         VERBOSE and print_db()
         return {}
+    
+    if action == "get_node_info":
+        return node_info()
 
+ 
     elif action == "ping":
         return {"status": "alive"}
     else:
