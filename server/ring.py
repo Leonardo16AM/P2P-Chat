@@ -636,6 +636,11 @@ def chord_handler(request: dict) -> dict:
             colored(f"TRANSFERING TO THE PREDECESSOR:\n {ret}", "magenta")
         )
         return ret
+    if action == "hotfix_replicate":
+        i = request.get("i")
+        VERBOSE and print(colored(f"HOT FIX REPLICATION: {i}", "magenta"))
+        hotfix_replicate(i)
+        return ret
 
     if action == "replicate":
         num = request.get("num")
@@ -685,6 +690,25 @@ def run_fix_fingers():
             print_ft()
         time.sleep(FIX_FINGERS_INTERVAL)
 
+#region hotfix_replicate
+def hotfix_replicate(i):
+    full_replicate()
+    if i==1:
+        return
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(TIMEOUT)
+            s.connect((predecessor["ip"], predecessor["port"]))
+            msg = {"action": "hotfix_replicate", "i": i-1}
+            s.sendall(json.dumps(msg).encode())
+            resp = s.recv(4096)
+    except Exception as e:
+        log_message(
+            colored(
+                f"[Replication] Error notificando necesidad de replicacion  :{predecessor['ip']}: {e}",
+                "red",
+            )
+        )
 
 # region to_predecessor
 def to_predecessor():
@@ -869,10 +893,10 @@ def full_replicate():
             FROM users
         """
         cursor.execute(query)
+        users_data = cursor.fetchall()
         conn.commit()
         conn.close()
 
-    users_data = cursor.fetchall()
     data_list = []
     for data in users_data:
         data_list.append(
@@ -890,7 +914,7 @@ def full_replicate():
 
 # region replicate
 def replicate(data_list, num=NUM_OF_REPLICAS):
-    if not len(data_list) or num <= 0:
+    if connected<=1 or not len(data_list) or num <= 0:
         return
     num = min(num, connected - 1)
     VERBOSE and print(colored(data_list, "red"))
@@ -959,6 +983,8 @@ def run_check_successor():
                         "red",
                     )
                 )
+            if connected>1:
+                hotfix_replicate(min(NUM_OF_REPLICAS, connected - 1))
             update_ring_lock = False
             print_db()
 

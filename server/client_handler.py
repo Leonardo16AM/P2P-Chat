@@ -5,10 +5,10 @@ import random
 import bcrypt
 import sqlite3
 from datetime import datetime
-from .config import DB_FILE, HOST, CLIENT_PORT, ALIVE_INTERVAL, TIMEOUT
+from .config import DB_FILE, HOST, CLIENT_PORT, ALIVE_INTERVAL, TIMEOUT, VERBOSE
 from .logging import log_message
 from .db import db_lock
-from .ring import find_successor, hash as chord_hash, rint, replicate
+from .ring import find_successor, hash as chord_hash, rint, replicate, print_db
 from termcolor import colored as col
 from datetime import datetime, timedelta
 import time
@@ -67,7 +67,7 @@ def cleanup_users():
                     f"\t{updated} usuarios actualizados a estado 'disconnected' por inactividad."
                 )
                 replicate(users_dict_list)
-
+                VERBOSE and print_db()
             conn.close()
             time.sleep(ALIVE_INTERVAL)
         except Exception as e:
@@ -100,6 +100,7 @@ def process_register(message):
             conn.close()
         log_message(f"Usuario '{username}' registrado.")
         replicate([get_user_data(username, "users")])
+        VERBOSE and print_db()
         return {"status": "success", "message": "Usuario registrado exitosamente."}
     except sqlite3.IntegrityError:
         log_message(f"Registro fallido: usuario '{username}' ya existe.")
@@ -147,6 +148,7 @@ def process_login(message, addr):
             conn.close()
         replicate([get_user_data(username, "users")])
         log_message(f"Usuario '{username}' inició sesión correctamente desde {new_ip}.")
+        VERBOSE and print_db()
         return {"status": "success", "message": "Login exitoso.", "ip": new_ip}
     except Exception as e:
         log_message(f"Error en login: {e}")
@@ -257,7 +259,6 @@ def forward_request_to_node(target_node, message):
     """
     Envia la solicitud al nodo especificado y retorna la respuesta.
     """
-    print("target node :", target_node)
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.settimeout(3)
