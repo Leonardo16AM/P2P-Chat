@@ -640,7 +640,7 @@ def chord_handler(request: dict) -> dict:
         i = request.get("i")
         VERBOSE and print(colored(f"HOT FIX REPLICATION: {i}", "magenta"))
         hotfix_replicate(i)
-        return ret
+        return {}
 
     if action == "replicate":
         num = request.get("num")
@@ -842,7 +842,7 @@ def update_values(data_list):
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
         VERBOSE and print(colored("UPDATING VALUES", "magenta"))
-        VERBOSE and print(colored(data_list, "magenta"))
+        # VERBOSE and print(colored(data_list, "magenta"))
 
         for value in data_list:
             if "node_id" not in value:
@@ -917,7 +917,7 @@ def replicate(data_list, num=NUM_OF_REPLICAS):
     if connected<=1 or not len(data_list) or num <= 0:
         return
     num = min(num, connected - 1)
-    VERBOSE and print(colored(data_list, "red"))
+    # VERBOSE and print(colored(data_list, "red"))
     VERBOSE and print(f"REPLICATING {num}")
     if len(data_list) == 1:
         if "node_id" not in data_list[0]:
