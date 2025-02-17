@@ -17,7 +17,20 @@ import server.global_state as gs
 
 
 # region get_user_data
-def get_user_data(username, table):
+def get_user_data(username: str, table: str) -> dict:
+    """
+    Retrieves user data from the specified SQLite database table based on a given username.
+
+    Args:
+        username (str): The username to search for in the specified table.
+        table (str): The name of the SQLite database table to query.
+
+    Returns:
+        dict or None: A dictionary containing the user data if found, otherwise None.
+
+    Raises:
+        sqlite3.Error: If an error occurs during the SQL query execution.
+    """
     conn = sqlite3.connect(DB_FILE)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
@@ -37,9 +50,9 @@ def get_user_data(username, table):
 
 
 # region cleanup_users
-def cleanup_users():
+def cleanup_users() -> None:
     """
-    Actualiza periódicamente el estado de los usuarios inactivos en la base de datos a 'disconnected'.
+    Periodically updates the status of inactive users in the database to 'disconnected'.
     """
     while True:
         try:
@@ -76,7 +89,25 @@ def cleanup_users():
 
 
 # region process_register
-def process_register(message):
+def process_register(message: dict) -> dict:
+    """
+    Registers a new user in the system.
+
+    This function inserts a new user record into the database with the provided
+    username, password, and public key. Passwords are hashed before storage. If
+    the user already exists, it returns an appropriate error message.
+
+    Args:
+        message (dict): A dictionary containing the following keys:
+            - username (str): The username of the new user.
+            - password (str): The plaintext password to be hashed and stored.
+            - public_key (str): The public key associated with the user.
+
+    Returns:
+        dict: A dictionary with a status key ('success' or 'error') and a
+        corresponding message. If successful, the function also replicates
+        new user data across the system.
+    """
     username = message.get("username")
     password = message.get("password")
     public_key = message.get("public_key")
@@ -111,10 +142,10 @@ def process_register(message):
 
 
 # region process_login
-def process_login(message, addr):
+def process_login(message: str, addr: tuple) -> dict:
     """
-    Procesa el login de un usuario.
-    Verifica las credenciales y actualiza su IP en la base de datos.
+    Processes user login.
+    Verifies credentials and updates the user's IP in the database.
     """
     username = message.get("username")
     password = message.get("password")
@@ -156,12 +187,12 @@ def process_login(message, addr):
 
 
 # region process_alive_signal
-def process_alive_signal(message, addr):
+def process_alive_signal(message: str, addr: tuple) -> dict:
     """
-    Procesa la señal de vida de un cliente.
-    Actualiza el estado del usuario a 'connected' y refresca el 'last_update'.
-    Si la IP del cliente (addr[0]) no coincide con la registrada, se devuelve
-    un response con status "disconnect", la nueva IP y una bandera para la transferencia de datos.
+    Processes a client's alive signal.
+    Updates the user's status to 'connected' and refreshes the 'last_update'.
+    If the client's IP (addr[0]) does not match the registered one, it returns
+    a response with status "disconnect", the new IP, and a flag for data transfer.
     """
     username = message.get("username")
     if not username:
@@ -194,9 +225,9 @@ def process_alive_signal(message, addr):
 
 
 # region process_get_user
-def process_get_user(message):
+def process_get_user(message: dict) -> dict:
     """
-    Consulta y retorna información asociada a un usuario.
+    Queries and returns information associated with a user.
     """
     username = message.get("target_username")
 
@@ -237,7 +268,18 @@ def process_get_user(message):
 
 
 # region process_client_message
-def process_client_message(message, addr):
+def process_client_message(message: str, addr: tuple) -> dict:
+    """
+    Processes a message received from a client and performs the corresponding action.
+
+    Args:
+        message (dict): The message received from the client. It should contain an "action" key.
+        addr (tuple): The address of the client.
+
+    Returns:
+        dict: A dictionary containing the result of the action performed. If the action is not recognized,
+              it returns a dictionary with "status" set to "error" and a corresponding error message.
+    """
     action = message.get("action")
     if action == "register":
         return process_register(message)
@@ -253,9 +295,9 @@ def process_client_message(message, addr):
 
 
 # region forward_request_to_node
-def forward_request_to_node(target_node, message):
+def forward_request_to_node(target_node: dict, message: dict) -> dict:
     """
-    Envia la solicitud al nodo especificado y retorna la respuesta.
+    Sends the request to the specified node and returns the response.
     """
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -273,7 +315,24 @@ def forward_request_to_node(target_node, message):
 
 
 # region handle_client
-def handle_client(conn, addr):
+def handle_client(conn: socket.socket, addr: tuple) -> None:
+    """
+    Handles the communication with a connected client.
+
+    Args:
+        conn (socket.socket): The connection object for the client.
+        addr (tuple): The address of the client in the form (ip, port).
+
+    Processes incoming messages from the client, determines the appropriate action based on the message content,
+    and sends back a response. If the message contains a username, it calculates the node responsible for the user
+    and either processes the message or forwards it to the responsible node. If no username is provided, it sends
+    back an error response.
+
+    The function also handles exceptions and ensures the connection is closed after processing.
+
+    Raises:
+        Exception: If there is an error during message processing or communication.
+    """
 
     try:
         data = conn.recv(4096)

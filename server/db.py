@@ -8,7 +8,11 @@ from .logging import log_message
 db_lock = Lock()
 
 
-def init_db():
+def init_db() -> None:
+    """
+    Initializes the SQLite database by creating the necessary tables.
+    """
+
     with db_lock:
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()

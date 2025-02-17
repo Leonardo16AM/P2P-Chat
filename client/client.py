@@ -38,12 +38,12 @@ logging.basicConfig(
 )
 
 
-def discover_servers(timeout=3):
+def discover_servers(timeout: int = 3) -> list:
     """
-    Envía una petición multicast para descubrir servidores y espera respuestas.
+    Sends a multicast request to discover servers and waits for responses.
 
-    :param timeout: Tiempo máximo (en segundos) para esperar respuestas.
-    :return: Lista con las IPs de los servidores descubiertos.
+    :param timeout: Maximum time (in seconds) to wait for responses.
+    :return: List of discovered server IPs.
     """
     MCAST_GRP = "224.0.0.1"
     MCAST_PORT = 10003
@@ -85,7 +85,7 @@ def discover_servers(timeout=3):
     return servers
 
 
-def is_server_active(host, port):
+def is_server_active(host: str, port: int) -> bool:
     """
     Verifica si el servidor está activo en la dirección y puerto especificados.
 
@@ -107,7 +107,10 @@ def is_server_active(host, port):
 LOCK_FILE = "client.lock"
 
 
-def check_single_instance():
+def check_single_instance() -> None:
+    """
+    Ensures that only a single instance of the client is running.
+    """
     if os.path.exists(LOCK_FILE):
         print("Otra instancia del cliente ya está en ejecución.")
         sys.exit()
@@ -116,15 +119,18 @@ def check_single_instance():
             f.write("lock")
 
 
-def remove_lock():
+def remove_lock() -> None:
+    """
+    Removes the lock file if it exists.
+    """
     if os.path.exists(LOCK_FILE):
         os.remove(LOCK_FILE)
 
 
 # region keys
-def load_or_generate_keys():
+def load_or_generate_keys() -> tuple:
     """
-    Carga las llaves RSA existentes desde archivos o genera nuevas si no existen.
+    Loads existing RSA keys from files or generates new ones if they do not exist.
     """
     if os.path.exists(PRIVATE_KEY_FILE) and os.path.exists(PUBLIC_KEY_FILE):
         with open(PRIVATE_KEY_FILE, "rb") as key_file:
@@ -164,9 +170,9 @@ def load_or_generate_keys():
 
 
 # region register
-def register(username, password, public_key_str):
+def register(username: str, password: str, public_key_str: str) -> dict:
     """
-    Registra un nuevo usuario con el nombre de usuario, contraseña y clave pública dados.
+    Registers a new user with the given username, password, and public key.
     """
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -186,9 +192,9 @@ def register(username, password, public_key_str):
 
 
 # region login
-def login(username, password):
+def login(username: str, password: str) -> dict:
     """
-    Intenta iniciar sesión de un usuario enviando sus credenciales al servidor.
+    Attempts to log in a user by sending their credentials to the server.
     """
     global DB_FILE
     try:
@@ -209,19 +215,26 @@ def login(username, password):
 
 
 # region logout
-def logout():
+def logout() -> None:
     global DB_FILE
     stop_all_threads()
     DB_FILE = "client_data.db"
 
 
-def stop_all_threads():
-    """Detiene todos los hilos en ejecución."""
+def stop_all_threads() -> None:
+    """
+    Signal all threads to stop by setting the stop event.
+    """
     stop_event.set()
 
 
 # region alive
-def send_alive_signal(username, public_key_str, stop_event):
+def send_alive_signal(username: str, public_key_str: str, stop_event: threading.Event):
+    """
+    Continuously sends an "alive" signal to the designated manager host to indicate that the client is active.
+    The function attempts to connect to the manager server and sends a JSON message with the username and public key.
+    Depending on the response received, it may update the SERVER_UP flag, transfer local data to a new client, or trigger a logout.
+    """
     global GESTOR_HOST
     global SERVER_UP
 
@@ -255,7 +268,7 @@ def send_alive_signal(username, public_key_str, stop_event):
                     print(col("Cerrando sesión...", "red"))
                     print("Presione enter para continuar...")
                     loguedout = True
-                    logout()  # Simula el cierre de sesión en el cliente antiguo
+                    logout()
                     return
                 else:
                     SERVER_UP = False
@@ -284,16 +297,17 @@ def send_alive_signal(username, public_key_str, stop_event):
     logging.info("Hilo send_alive_signal finalizado.")
 
 
-def transfer_local_data(new_ip, port, retries=3, delay=2):
+def transfer_local_data(
+    new_ip: str, port: int, retries: int = 3, delay: int = 2
+) -> None:
     """
-    Extrae los datos locales (chats, mensajes y mensajes pendientes)
-    y los envía al nuevo cliente, que escucha en el puerto 'port'.
+    Extracts local data (chats, messages, and pending messages)
+    and sends them to the new client, which is listening on port 'port'.
 
-    En caso de error de conexión (p.ej. Connection Refused), reintenta la conexión
-    'retries' veces con un retraso de 'delay' segundos entre intentos.
+    In case of a connection error (e.g., Connection Refused), it retries the connection
+    'retries' times with a delay of 'delay' seconds between attempts.
     """
     try:
-        # Extraer datos de la base de datos local
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM chats")
@@ -334,8 +348,8 @@ def transfer_local_data(new_ip, port, retries=3, delay=2):
 
 
 # region user_query
-def query_user_info(username, target_username):
-    """Consulta la información de un usuario en el servidor y actualiza la caché."""
+def query_user_info(username: str, target_username: str) -> dict:
+    """Query a user's information from the server and update the cache."""
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.connect((GESTOR_HOST, GESTOR_PORT))
@@ -359,15 +373,15 @@ def query_user_info(username, target_username):
 # region database
 
 
-def get_user_db(username):
-    """Devuelve la ruta de la base de datos específica para un usuario."""
+def get_user_db(username: str) -> str:
+    """Returns the database path specific to a user."""
     if not os.path.exists(USER_DATA_PATH):
         os.makedirs(USER_DATA_PATH)
     return os.path.join(USER_DATA_PATH, f"{username}_data.db")
 
 
-def initialize_user_database(username):
-    """Inicializa la base de datos SQLite para un usuario específico."""
+def initialize_user_database(username: str) -> None:
+    """Initializes the SQLite database for a specific user."""
     db_file = get_user_db(username)
     conn = sqlite3.connect(db_file)
     cursor = conn.cursor()
@@ -420,8 +434,10 @@ def initialize_user_database(username):
 # region chat
 
 
-def save_message(chat_id, sender, message, delivered=False):
-    """Guarda un mensaje en la base de datos."""
+def save_message(
+    chat_id: int, sender: str, message: str, delivered: bool = False
+) -> None:
+    """Saves a message in the database."""
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
 
@@ -446,8 +462,8 @@ def save_message(chat_id, sender, message, delivered=False):
     conn.close()
 
 
-def get_chat_messages(chat_id):
-    """Obtiene los mensajes de un chat."""
+def get_chat_messages(chat_id: int) -> list:
+    """Gets the messages of a chat."""
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute(
@@ -464,8 +480,8 @@ def get_chat_messages(chat_id):
     return messages
 
 
-def list_chats():
-    """Lista todos los chats activos."""
+def list_chats() -> list:
+    """Lists all active chats."""
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute(
@@ -480,8 +496,8 @@ def list_chats():
     return chats
 
 
-def show_chats():
-    """Muestra una lista de los chats activos."""
+def show_chats() -> None:
+    """Shows a list of active chats."""
     chats = list_chats()
     if not chats:
         print(col("No tienes chats activos.", "yellow"))
@@ -495,8 +511,8 @@ def show_chats():
         )
 
 
-def get_or_create_chat(username):
-    """Obtiene o crea un chat con un usuario."""
+def get_or_create_chat(username: str) -> int:
+    """Gets or creates a chat with a user."""
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
 
@@ -525,8 +541,8 @@ def get_or_create_chat(username):
     return chat_id
 
 
-def open_chat():
-    """Permite al usuario abrir un chat y ver los mensajes."""
+def open_chat() -> None:
+    """Allows the user to open a chat and view messages."""
     chat_id = input("ID del chat a abrir: ")
     try:
         chat_id = int(chat_id)
@@ -543,8 +559,8 @@ def open_chat():
 
 
 # region send_message
-def send_message(username):
-    """Envía un mensaje a otro usuario."""
+def send_message(username: str) -> None:
+    """Sends a message to another user."""
     target_username = input("Usuario destino: ")
     message_content = input("Mensaje: ")
 
@@ -616,8 +632,8 @@ def send_message(username):
 listener_thread = None
 
 
-def start_message_listener(username):
-    """Inicia un servidor para recibir mensajes de otros usuarios."""
+def start_message_listener(username: str) -> None:
+    """Starts a server to receive messages from other users."""
     global listener_thread
 
     def listen():
@@ -671,10 +687,10 @@ def start_message_listener(username):
     listener_thread.start()
 
 
-def merge_local_data(data):
+def merge_local_data(data: dict) -> None:
     """
-    Fusiona los datos transferidos (chats, mensajes y mensajes pendientes)
-    en la base de datos local del nuevo cliente.
+    Merge the transferred data (chats, messages, and pending messages)
+    into the new client's local database.
     """
     try:
         chats = data.get("chats", [])
@@ -683,9 +699,7 @@ def merge_local_data(data):
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
 
-        # Insertar o actualizar chats
         for chat in chats:
-            # Se asume que chat es una tupla: (id, username, last_message, last_timestamp)
             username = chat[1]
             cursor.execute("SELECT id FROM chats WHERE username = ?", (username,))
             if cursor.fetchone() is None:
@@ -693,16 +707,12 @@ def merge_local_data(data):
                     "INSERT INTO chats (username, last_message, last_timestamp) VALUES (?, ?, ?)",
                     (chat[1], chat[2], chat[3]),
                 )
-        # Insertar mensajes
         for msg in messages:
-            # Se asume que msg es una tupla: (id, chat_id, sender, message, timestamp, delivered)
             cursor.execute(
                 "INSERT INTO messages (chat_id, sender, message, timestamp, delivered) VALUES (?, ?, ?, ?, ?)",
                 (msg[1], msg[2], msg[3], msg[4], msg[5]),
             )
-        # Insertar mensajes pendientes
         for p in pending:
-            # Se asume que p es una tupla: (id, sender, receiver, message, timestamp)
             cursor.execute(
                 "INSERT INTO pending_messages (sender, receiver, message, timestamp) VALUES (?, ?, ?, ?)",
                 (p[1], p[2], p[3], p[4]),
@@ -715,8 +725,8 @@ def merge_local_data(data):
 
 
 # region pending messages
-def store_pending_message(sender, receiver, content):
-    """Guarda un mensaje pendiente en la base de datos."""
+def store_pending_message(sender: str, receiver: str, content: str) -> None:
+    """Saves a pending message in the database."""
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute(
@@ -746,8 +756,8 @@ def start_pending_message_worker(username):
     thread.start()
 
 
-def check_and_send_pending_messages(username):
-    """Revisa y envía mensajes pendientes."""
+def check_and_send_pending_messages(username: str) -> None:
+    """Check and send pending messages."""
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
 
@@ -796,8 +806,10 @@ def check_and_send_pending_messages(username):
 
 
 # region send_message_to_ip
-def send_message_to_ip(ip, sender, receiver, message_content):
-    """Intenta conectar y enviar un mensaje al destinatario en una IP específica usando dos conexiones."""
+def send_message_to_ip(
+    ip: str, sender: str, receiver: str, message_content: str
+) -> bool:
+    """Tries to connect and send a message to the recipient at a specific IP using two connections."""
     try:
         # Primera conexión: Verificar quién está conectado
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as query_socket:
@@ -841,8 +853,8 @@ def send_message_to_ip(ip, sender, receiver, message_content):
     return False
 
 
-def save_message_to_chat(receiver, sender, message_content):
-    """Guarda un mensaje entregado en la tabla de mensajes y actualiza el chat."""
+def save_message_to_chat(receiver: str, sender: str, message_content: str) -> None:
+    """Saves a delivered message in the messages table and updates the chat."""
     chat_id = get_or_create_chat(receiver)
     save_message(chat_id, sender, message_content, delivered=True)
 
@@ -850,18 +862,20 @@ def save_message_to_chat(receiver, sender, message_content):
 cache = {}
 
 
-def get_cached_ip(username):
-    """Obtiene la IP cacheada de un usuario."""
+def get_cached_ip(username: str) -> str:
+    """Gets the cached IP of a user."""
     return cache.get(username)
 
 
-def update_cached_ip(username, ip):
-    """Actualiza la IP cacheada de un usuario."""
+def update_cached_ip(username: str, ip: str) -> None:
+    """Updates the cached IP of a user."""
     cache[username] = ip
-    # print(col(f"IP cacheada para {username} actualizada a {ip}.", "blue"))
 
 
-def connect_to_server():
+def connect_to_server() -> None:
+    """
+    Connects to the server by periodically checking its availability.
+    """
     global SERVER_UP, GESTOR_HOST
     while True:
         time.sleep(5)
@@ -876,7 +890,21 @@ def connect_to_server():
 
 
 # region main
-def main():
+def main() -> None:
+    """
+    Main entry point for the chat client application.
+
+    This function performs the following tasks:
+    1. Discovers and connects to the chat server.
+    2. Generates or loads existing cryptographic keys for secure communication.
+    3. Presents a menu to the user for registration, login, or exit.
+    4. When logged in, starts background threads to listen for messages and periodically send alive signals.
+    5. Provides sub-menu options for querying users, sending messages, viewing chats, opening a chat, or logging out.
+    6. Manages session states and handles user input until the user logs out or exits.
+
+    Returns:
+        None
+    """
     global GESTOR_HOST, stop_event, loguedout
     threading.Thread(target=connect_to_server, daemon=True).start()
 

@@ -11,7 +11,36 @@ MIN_PORT = 10000
 PROCESS_AMOUNT = 5
 
 
-def proxy(port, read_buffer=4196):
+def proxy(port: int, read_buffer: int = 4196) -> None:
+    """
+    Starts a UDP proxy that listens for incoming datagrams on the specified port,
+    retrieves the original destination address from ancillary data, and forwards
+    multicast packets appropriately.
+
+    This function creates a UDP socket with options enabled for address reuse
+    and transparent proxying. It binds to all interfaces on the provided port and
+    continuously listens for messages. Upon receiving a datagram, the function:
+        - Filters out messages from reserved or local addresses and avoids duplication.
+        - Extracts the original destination address from the ancillary data.
+        - If the destination is a multicast address, it creates a new UDP socket with
+            specific multicast options (e.g., disabling loopback, setting TTL, and specifying
+            the outgoing interface) to send a discovery message based on the original datagram.
+
+    Parameters:
+            port (int): The port number on which the proxy will listen for incoming UDP datagrams.
+            read_buffer (int, optional): The size of the buffer used to read data from the socket.
+                                                                     Defaults to 4196 bytes.
+
+    Raises:
+            TypeError: If the extracted destination address does not belong to the IPv4 family.
+
+    Notes:
+            - The function uses system-specific socket options such as IP_RECVORIGDSTADDR and
+                IP_TRANSPARENT, which may require root permissions or special system configuration.
+            - The CURRENT design assumes that constants such as LOCAL_ADDRS, RESERVED_ADDRS,
+                and IP_RECVORIGDSTADDR are defined in the module scope.
+            - Adjust the IP used in IP_MULTICAST_IF option ("192.168.1.100") to match your network setup.
+    """
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 

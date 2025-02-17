@@ -4,6 +4,7 @@ import threading
 import time
 import sys
 import os
+from typing import Tuple
 from .config import HOST, SERVER_PORT, CLIENT_PORT
 from .logging import log_message
 from .db import init_db
@@ -16,7 +17,10 @@ import server.global_state as gs
 
 
 # region initialize_global_state
-def initialize_global_state():
+def initialize_global_state() -> None:
+    """
+    Initializes the global state for the server application.
+    """
     local_ip_env = os.environ.get("LOCAL_IP")
     if local_ip_env:
         local_ip_value = local_ip_env
@@ -31,7 +35,10 @@ def initialize_global_state():
 
 
 # region CHORD server
-def chord_server():
+def chord_server() -> None:
+    """
+    Starts a Chord RPC server that listens for incoming connections to handle chord requests.
+    """
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.bind((HOST, SERVER_PORT))
     s.listen(5)
@@ -43,7 +50,10 @@ def chord_server():
         ).start()
 
 
-def handle_chord_request(conn, addr):
+def handle_chord_request(conn: socket.socket, addr: Tuple[str, int]) -> None:
+    """
+    Handles a chord protocol request from a client.
+    """
     try:
         data = conn.recv(4096)
         if data:
@@ -59,7 +69,10 @@ def handle_chord_request(conn, addr):
 
 
 # region Client server
-def client_server():
+def client_server() -> None:
+    """
+    Creates a TCP server socket that listens for client connections and spawns a new thread to handle each request.
+    """
     client_port = CLIENT_PORT
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.bind((HOST, client_port))
@@ -73,7 +86,10 @@ def client_server():
 
 
 # region handle_client_request
-def handle_client_request(conn, addr):
+def handle_client_request(conn: socket.socket, addr: Tuple[str, int]) -> None:
+    """
+    Handles a client request by invoking the handle_client function and logging any exceptions that occur.
+    """
     try:
         handle_client(conn, addr)
     except Exception as e:
@@ -81,10 +97,10 @@ def handle_client_request(conn, addr):
 
 
 # region multicast_listener
-def multicast_listener():
+def multicast_listener() -> None:
     """
-    Función que se encarga de escuchar peticiones multicast.
-    Cuando recibe el mensaje DISCOVER_SERVER, responde con su dirección IP.
+    Function that listens for multicast requests.
+    When it receives the DISCOVER_SERVER message, it responds with its IP address.
     """
     MCAST_GRP = "224.0.0.1"
     MCAST_PORT = 10003
@@ -125,12 +141,12 @@ def multicast_listener():
 
 
 # region discover_servers
-def discover_servers(timeout=1):
+def discover_servers(timeout: str = 1) -> list:
     """
-    Envía una petición multicast para descubrir servidores y espera respuestas.
+    Sends a multicast request to discover servers and waits for responses.
 
-    :param timeout: Tiempo máximo (en segundos) para esperar respuestas.
-    :return: Lista con las IPs de los servidores descubiertos.
+    :param timeout: Maximum time (in seconds) to wait for responses.
+    :return: List of IPs of the discovered servers.
     """
     MCAST_GRP = "224.0.0.1"
     MCAST_PORT = 10003
@@ -173,7 +189,31 @@ def discover_servers(timeout=1):
 
 
 # region main
-def main():
+def main() -> None:
+    """
+    Main entry point for the server application.
+
+    This function performs the following operations:
+    1. Prints a decorative separator line.
+    2. Initializes the global state and the database.
+    3. Imports necessary functions from the ring module and initializes the chord ring.
+    4. Attempts to join an existing chord ring:
+        - Discovers a server using discover_servers to get the IP.
+        - Constructs the node information and tries to join the ring.
+        - Logs a success message on joining, or if joining fails, logs that a new ring is being initiated.
+    5. Starts chord maintenance routines.
+    6. Launches several daemon threads to handle:
+        - Multicast message listening.
+        - Chord server operations.
+        - Client server operations.
+        - Cleanup of inactive users.
+    7. Enters an infinite loop, periodically sleeping until a KeyboardInterrupt is received, at which point:
+        - Logs a shutdown message.
+        - Exits the application gracefully.
+
+    Raises:
+         SystemExit: When a KeyboardInterrupt is caught, the application terminates.
+    """
     print(
         "________________________________________________________________________________"
     )
