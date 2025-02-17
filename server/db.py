@@ -7,11 +7,13 @@ from .logging import log_message
 
 db_lock = Lock()
 
+
 def init_db():
     with db_lock:
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
-        cursor.execute("""
+        cursor.execute(
+            """
             CREATE TABLE IF NOT EXISTS users (
                 username TEXT PRIMARY KEY,
                 password BLOB NOT NULL,
@@ -20,9 +22,11 @@ def init_db():
                 last_update TEXT NOT NULL,
                 status TEXT NOT NULL
             )
-        """)
+        """
+        )
         conn.commit()
-        cursor.execute("""
+        cursor.execute(
+            """
             CREATE TABLE IF NOT EXISTS backups (
                 username TEXT PRIMARY KEY,
                 password BLOB NOT NULL,
@@ -32,7 +36,8 @@ def init_db():
                 status TEXT NOT NULL,
                 node_id TEXT NOT NULL
             )
-        """)
+        """
+        )
         conn.commit()
         conn.close()
     log_message("Base de datos inicializada.")

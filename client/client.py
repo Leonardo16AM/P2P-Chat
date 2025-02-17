@@ -29,7 +29,7 @@ PRIVATE_KEY_FILE = "private_key.pem"
 PUBLIC_KEY_FILE = "public_key.pem"
 
 stop_event = threading.Event()
-loguedout=False
+loguedout = False
 
 logging.basicConfig(
     filename="client.log",
@@ -45,7 +45,7 @@ def discover_servers(timeout=3):
     :param timeout: Tiempo máximo (en segundos) para esperar respuestas.
     :return: Lista con las IPs de los servidores descubiertos.
     """
-    MCAST_GRP = '224.0.0.1'
+    MCAST_GRP = "224.0.0.1"
     MCAST_PORT = 10003
     MESSAGE = "DISCOVER_SERVER"
     BUFFER_SIZE = 1024
@@ -55,7 +55,7 @@ def discover_servers(timeout=3):
     sock.settimeout(timeout)
 
     # Configurar TTL del paquete multicast
-    ttl = struct.pack('b', 1)
+    ttl = struct.pack("b", 1)
     sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, ttl)
 
     # Enviar la petición multicast
@@ -234,7 +234,7 @@ def send_alive_signal(username, public_key_str, stop_event):
                 message = {
                     "action": "alive_signal",
                     "username": username,
-                    "public_key": public_key_str
+                    "public_key": public_key_str,
                 }
                 s.sendall(json.dumps(message).encode())
                 response = s.recv(4096)
@@ -245,11 +245,16 @@ def send_alive_signal(username, public_key_str, stop_event):
                     logging.info("Señal de vida enviada exitosamente.")
                 elif response.get("status") == "disconnect":
                     new_ip = response.get("new_ip")
-                    print(col("Otro cliente se ha conectado. Transfiriendo datos al nuevo cliente...", "red"))
+                    print(
+                        col(
+                            "Otro cliente se ha conectado. Transfiriendo datos al nuevo cliente...",
+                            "red",
+                        )
+                    )
                     transfer_local_data(new_ip, CLIENT_PORT)
-                    print(col('Cerrando sesión...', 'red'))
-                    print('Presione enter para continuar...')
-                    loguedout=True
+                    print(col("Cerrando sesión...", "red"))
+                    print("Presione enter para continuar...")
+                    loguedout = True
                     logout()  # Simula el cierre de sesión en el cliente antiguo
                     return
                 else:
@@ -261,7 +266,7 @@ def send_alive_signal(username, public_key_str, stop_event):
         except Exception as e:
             SERVER_UP = False
             logging.error(f"Error al enviar señal de vida: {str(e)}")
-            gestor_ip=False
+            gestor_ip = False
             try:
                 gestor_ip = discover_servers()[0]
             except Exception as e:
@@ -279,13 +284,11 @@ def send_alive_signal(username, public_key_str, stop_event):
     logging.info("Hilo send_alive_signal finalizado.")
 
 
-
-
 def transfer_local_data(new_ip, port, retries=3, delay=2):
     """
     Extrae los datos locales (chats, mensajes y mensajes pendientes)
     y los envía al nuevo cliente, que escucha en el puerto 'port'.
-    
+
     En caso de error de conexión (p.ej. Connection Refused), reintenta la conexión
     'retries' veces con un retraso de 'delay' segundos entre intentos.
     """
@@ -305,7 +308,7 @@ def transfer_local_data(new_ip, port, retries=3, delay=2):
             "action": "transfer_data",
             "chats": chats,
             "messages": messages,
-            "pending": pending
+            "pending": pending,
         }
     except Exception as e:
         print(col(f"Error al extraer datos locales: {e}", "red"))
@@ -322,12 +325,12 @@ def transfer_local_data(new_ip, port, retries=3, delay=2):
                 return  # Salimos si la transferencia es exitosa
         except Exception as e:
             attempt += 1
-            print(col(f"Error en transferencia de datos (intento {attempt}): {e}", "red"))
+            print(
+                col(f"Error en transferencia de datos (intento {attempt}): {e}", "red")
+            )
             time.sleep(delay)
-    
+
     print(col("No se pudo transferir los datos tras varios intentos.", "red"))
-
-
 
 
 # region user_query
@@ -561,7 +564,12 @@ def send_message(username):
                         "content": message_content,
                     }
                     client_socket.sendall(json.dumps(message).encode())
-                    print(col(f"Mensaje entregado a {target_username}: {message_content}", "green"))
+                    print(
+                        col(
+                            f"Mensaje entregado a {target_username}: {message_content}",
+                            "green",
+                        )
+                    )
 
                     save_message(chat_id, username, message_content, delivered=True)
             except Exception as e:
@@ -681,24 +689,29 @@ def merge_local_data(data):
             username = chat[1]
             cursor.execute("SELECT id FROM chats WHERE username = ?", (username,))
             if cursor.fetchone() is None:
-                cursor.execute("INSERT INTO chats (username, last_message, last_timestamp) VALUES (?, ?, ?)",
-                               (chat[1], chat[2], chat[3]))
+                cursor.execute(
+                    "INSERT INTO chats (username, last_message, last_timestamp) VALUES (?, ?, ?)",
+                    (chat[1], chat[2], chat[3]),
+                )
         # Insertar mensajes
         for msg in messages:
             # Se asume que msg es una tupla: (id, chat_id, sender, message, timestamp, delivered)
-            cursor.execute("INSERT INTO messages (chat_id, sender, message, timestamp, delivered) VALUES (?, ?, ?, ?, ?)",
-                           (msg[1], msg[2], msg[3], msg[4], msg[5]))
+            cursor.execute(
+                "INSERT INTO messages (chat_id, sender, message, timestamp, delivered) VALUES (?, ?, ?, ?, ?)",
+                (msg[1], msg[2], msg[3], msg[4], msg[5]),
+            )
         # Insertar mensajes pendientes
         for p in pending:
             # Se asume que p es una tupla: (id, sender, receiver, message, timestamp)
-            cursor.execute("INSERT INTO pending_messages (sender, receiver, message, timestamp) VALUES (?, ?, ?, ?)",
-                           (p[1], p[2], p[3], p[4]))
+            cursor.execute(
+                "INSERT INTO pending_messages (sender, receiver, message, timestamp) VALUES (?, ?, ?, ?)",
+                (p[1], p[2], p[3], p[4]),
+            )
         conn.commit()
         conn.close()
         print(col("Datos transferidos y fusionados en el nuevo cliente.", "green"))
     except Exception as e:
         print(col(f"Error al fusionar datos: {e}", "red"))
-
 
 
 # region pending messages
@@ -847,29 +860,31 @@ def update_cached_ip(username, ip):
     cache[username] = ip
     # print(col(f"IP cacheada para {username} actualizada a {ip}.", "blue"))
 
+
 def connect_to_server():
-    global SERVER_UP,GESTOR_HOST
+    global SERVER_UP, GESTOR_HOST
     while True:
         time.sleep(5)
         if not is_server_active(GESTOR_HOST, GESTOR_PORT):
-            SERVER_UP=False
+            SERVER_UP = False
             try:
                 GESTOR_HOST = discover_servers()[0]
-                print(col(f"NEW SERVER FOUND {GESTOR_HOST}",'green'))
-                SERVER_UP=True
+                print(col(f"NEW SERVER FOUND {GESTOR_HOST}", "green"))
+                SERVER_UP = True
             except Exception as e:
                 pass
 
+
 # region main
 def main():
-    global GESTOR_HOST, stop_event,loguedout
+    global GESTOR_HOST, stop_event, loguedout
     threading.Thread(target=connect_to_server, daemon=True).start()
-    
+
     try:
         GESTOR_HOST = discover_servers()[0]
-        print(col(f"FOUND SERVER ON:{GESTOR_HOST}",'green'))
+        print(col(f"FOUND SERVER ON:{GESTOR_HOST}", "green"))
     except Exception as e:
-        GESTOR_HOST='192.168.1.2'
+        GESTOR_HOST = "192.168.1.2"
 
     if is_server_active(GESTOR_HOST, GESTOR_PORT):
         print(col("El servidor está activo.", "green"))
@@ -922,7 +937,7 @@ def main():
 
                 while True:
                     if loguedout:
-                        loguedout=False
+                        loguedout = False
                         break
 
                     print("\nOpciones disponibles:")
@@ -932,9 +947,9 @@ def main():
                     print("\t4. Abrir un chat")
                     print("\t5. Cerrar sesión")
                     sub_choice = input("Opción: ")
-                    
+
                     if loguedout:
-                        loguedout=False
+                        loguedout = False
                         break
 
                     if sub_choice == "1":

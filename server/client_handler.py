@@ -8,7 +8,7 @@ from datetime import datetime
 from .config import DB_FILE, HOST, CLIENT_PORT, ALIVE_INTERVAL, TIMEOUT
 from .logging import log_message
 from .db import db_lock
-from .ring import find_successor, hash as chord_hash,rint, replicate
+from .ring import find_successor, hash as chord_hash, rint, replicate
 from termcolor import colored as col
 from datetime import datetime, timedelta
 import time
@@ -16,14 +16,14 @@ import time
 import server.global_state as gs
 
 
-#region get_user_data
+# region get_user_data
 def get_user_data(username, table):
     conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = sqlite3.Row  
+    conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
 
     query = f"SELECT * FROM {table} WHERE username = ?"
-    
+
     try:
         cursor.execute(query, (username,))
         row = cursor.fetchone()
@@ -35,7 +35,8 @@ def get_user_data(username, table):
 
     return dict(row) if row else None
 
-#region cleanup_users
+
+# region cleanup_users
 def cleanup_users():
     """
     Actualiza periódicamente el estado de los usuarios inactivos en la base de datos a 'disconnected'.
@@ -49,20 +50,22 @@ def cleanup_users():
             cutoff = datetime.now() - timedelta(seconds=5)
             cursor.execute(
                 "SELECT * FROM users WHERE last_update < ? AND status = 'connected'",
-                (cutoff,)
+                (cutoff,),
             )
             users_to_update = cursor.fetchall()
 
             if users_to_update:
                 cursor.execute(
                     "UPDATE users SET status = 'disconnected' WHERE last_update < ? AND status = 'connected'",
-                    (cutoff,)
+                    (cutoff,),
                 )
                 updated = cursor.rowcount
                 conn.commit()
-                
+
                 users_dict_list = [dict(user) for user in users_to_update]
-                log_message(f"\t{updated} usuarios actualizados a estado 'disconnected' por inactividad.")
+                log_message(
+                    f"\t{updated} usuarios actualizados a estado 'disconnected' por inactividad."
+                )
                 replicate(users_dict_list)
 
             conn.close()
@@ -72,9 +75,7 @@ def cleanup_users():
             time.sleep(ALIVE_INTERVAL)
 
 
-
-
-#region process_register
+# region process_register
 def process_register(message):
     username = message.get("username")
     password = message.get("password")
@@ -85,17 +86,20 @@ def process_register(message):
         with db_lock:
             conn = sqlite3.connect(DB_FILE)
             cursor = conn.cursor()
-            hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode('utf-8')
+            hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode("utf-8")
 
             now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO users (username, password, ip, public_key, last_update, status)
                 VALUES (?, ?, ?, ?, ?, ?)
-            """, (username, hashed, "", public_key, now_str, "disconnected"))
+            """,
+                (username, hashed, "", public_key, now_str, "disconnected"),
+            )
             conn.commit()
             conn.close()
         log_message(f"Usuario '{username}' registrado.")
-        replicate([get_user_data(username,'users')])
+        replicate([get_user_data(username, "users")])
         return {"status": "success", "message": "Usuario registrado exitosamente."}
     except sqlite3.IntegrityError:
         log_message(f"Registro fallido: usuario '{username}' ya existe.")
@@ -104,7 +108,8 @@ def process_register(message):
         log_message(f"Error en register: {e}")
         return {"status": "error", "message": str(e)}
 
-#region process_login
+
+# region process_login
 def process_login(message, addr):
     """
     Procesa el login de un usuario.
@@ -118,7 +123,9 @@ def process_login(message, addr):
         with db_lock:
             conn = sqlite3.connect(DB_FILE)
             cursor = conn.cursor()
-            cursor.execute("SELECT password, ip FROM users WHERE username = ?", (username,))
+            cursor.execute(
+                "SELECT password, ip FROM users WHERE username = ?", (username,)
+            )
             row = cursor.fetchone()
             if row is None:
                 conn.close()
@@ -126,22 +133,25 @@ def process_login(message, addr):
                 return {"status": "error", "message": "Usuario no encontrado."}
             stored_password, current_ip = row
 
-            if not bcrypt.checkpw(password.encode(), stored_password.encode('utf-8')):
+            if not bcrypt.checkpw(password.encode(), stored_password.encode("utf-8")):
                 conn.close()
                 log_message(f"Login fallido: contraseña incorrecta para '{username}'.")
                 return {"status": "error", "message": "Contraseña incorrecta."}
             # Actualizamos IP del usuario si es necesario (suponiendo que addr[0] es la IP)
             new_ip = addr[0]
-            cursor.execute("UPDATE users SET ip = ?, last_update = datetime('now'), status = ? WHERE username = ?",
-                           (new_ip, "connected", username))
+            cursor.execute(
+                "UPDATE users SET ip = ?, last_update = datetime('now'), status = ? WHERE username = ?",
+                (new_ip, "connected", username),
+            )
             conn.commit()
             conn.close()
-        replicate([get_user_data(username,'users')])
+        replicate([get_user_data(username, "users")])
         log_message(f"Usuario '{username}' inició sesión correctamente desde {new_ip}.")
         return {"status": "success", "message": "Login exitoso.", "ip": new_ip}
     except Exception as e:
         log_message(f"Error en login: {e}")
         return {"status": "error", "message": str(e)}
+
 
 # region process_alive_signal
 def process_alive_signal(message, addr):
@@ -169,8 +179,10 @@ def process_alive_signal(message, addr):
         with db_lock:
             conn = sqlite3.connect(DB_FILE)
             cursor = conn.cursor()
-            cursor.execute("UPDATE users SET last_update = datetime('now'), status = ? WHERE username = ?",
-                           ("connected", username))
+            cursor.execute(
+                "UPDATE users SET last_update = datetime('now'), status = ? WHERE username = ?",
+                ("connected", username),
+            )
             conn.commit()
             conn.close()
         return {"status": "success", "message": "Alive signal procesado."}
@@ -179,41 +191,42 @@ def process_alive_signal(message, addr):
         return {"status": "error", "message": str(e)}
 
 
-
-#region process_get_user
+# region process_get_user
 def process_get_user(message):
     """
     Consulta y retorna información asociada a un usuario.
     """
     username = message.get("target_username")
 
-    print("usernameeeeeeeeee :" , username)
+    print("usernameeeeeeeeee :", username)
     if not username:
         return {"status": "error", "message": "Username no proporcionado."}
     try:
         with db_lock:
             conn = sqlite3.connect(DB_FILE)
             cursor = conn.cursor()
-            cursor.execute("SELECT username, ip, public_key, last_update, status FROM users WHERE username = ?",
-                           (username,))
+            cursor.execute(
+                "SELECT username, ip, public_key, last_update, status FROM users WHERE username = ?",
+                (username,),
+            )
             row = cursor.fetchone()
             conn.close()
-            
+
         if row is None:
             log_message(f"Consulta get_user: usuario '{username}' no encontrado.")
             return {"status": "error", "message": "Usuario no encontrado."}
-        
+
         if row[4] != "connected":
             conn.close()
             log_message(f"\tError: El usuario {username} está desconectado.")
             return {"status": "error", "message": "El usuario está desconectado."}
-        
+
         user_info = {
             "status": "success",
             "username": row[0],
             "ip": row[1],
             "public_key": row[2],
-            "last_update": row[3]
+            "last_update": row[3],
         }
         log_message(f"Información consultada para el usuario '{username}'.")
         print("user info ", user_info)
@@ -221,8 +234,9 @@ def process_get_user(message):
     except Exception as e:
         log_message(f"Error en get_user: {e}")
         return {"status": "error", "message": str(e)}
-    
-#region process_client_message
+
+
+# region process_client_message
 def process_client_message(message, addr):
     action = message.get("action")
     if action == "register":
@@ -237,12 +251,13 @@ def process_client_message(message, addr):
         log_message(f"Acción no reconocida en petición de cliente: {action}")
         return {"status": "error", "message": "Acción no reconocida."}
 
-#region forward_request_to_node
+
+# region forward_request_to_node
 def forward_request_to_node(target_node, message):
     """
     Envia la solicitud al nodo especificado y retorna la respuesta.
     """
-    print("target node :",target_node)
+    print("target node :", target_node)
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.settimeout(3)
@@ -252,11 +267,13 @@ def forward_request_to_node(target_node, message):
             return json.loads(response_data.decode())
     except Exception as e:
         log_message(f"Error reenviando solicitud a nodo {target_node.get('id')}: {e}")
-        return {"status": "error", "message": "Error comunicándose con el nodo responsable."}
+        return {
+            "status": "error",
+            "message": "Error comunicándose con el nodo responsable.",
+        }
 
 
-
-#region handle_client
+# region handle_client
 def handle_client(conn, addr):
 
     try:
@@ -264,30 +281,29 @@ def handle_client(conn, addr):
         if not data:
             return
         message = json.loads(data.decode())
-        
+
         try:
-            if message['action']!='alive_signal':
-                print(col(message,'magenta'))
+            if message["action"] != "alive_signal":
+                print(col(message, "magenta"))
         except Exception as e:
             pass
-        
-        if message.get("ip",-1)==-1:
-            message['ip']=addr[0]
+
+        if message.get("ip", -1) == -1:
+            message["ip"] = addr[0]
         else:
-            addr=[message['ip'],addr[1]]
+            addr = [message["ip"], addr[1]]
 
         username = message.get("username")
 
-            
         if username:
-            if message['action']=='get_user':
-                username=message['target_username']
+            if message["action"] == "get_user":
+                username = message["target_username"]
             node_hash = chord_hash(username)
             responsible = find_successor(node_hash, event=rint(), hard_mode=False)
             if responsible["id"] == gs.my_node_id:
                 response = process_client_message(message, addr)
             else:
-                response = forward_request_to_node(responsible, message)    
+                response = forward_request_to_node(responsible, message)
         else:
             response = {"status": "error", "message": "Username no proporcionado."}
         conn.sendall(json.dumps(response).encode())

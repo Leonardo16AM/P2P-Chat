@@ -2,6 +2,7 @@
 from datetime import datetime
 from .config import LOG_FILE
 
+
 def log_message(message):
     log_entry = f"{datetime.now()} - {message}\n"
     with open(LOG_FILE, "a") as f:

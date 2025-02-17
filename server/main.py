@@ -14,7 +14,8 @@ import struct
 
 import server.global_state as gs
 
-#region initialize_global_state
+
+# region initialize_global_state
 def initialize_global_state():
     local_ip_env = os.environ.get("LOCAL_IP")
     if local_ip_env:
@@ -22,11 +23,14 @@ def initialize_global_state():
     else:
         local_ip_value = socket.gethostbyname(socket.gethostname())
     gs.local_ip = local_ip_value
-    my_node_id_value = hash(local_ip_value + str(SERVER_PORT)) & 0xffffffff  # 32 bits
+    my_node_id_value = hash(local_ip_value + str(SERVER_PORT)) & 0xFFFFFFFF  # 32 bits
     gs.my_node_id = my_node_id_value
-    log_message(col(f"Iniciando gestor. IP: {gs.local_ip}, node_id: {gs.my_node_id}",'green'))
+    log_message(
+        col(f"Iniciando gestor. IP: {gs.local_ip}, node_id: {gs.my_node_id}", "green")
+    )
 
-#region CHORD server
+
+# region CHORD server
 def chord_server():
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.bind((HOST, SERVER_PORT))
@@ -34,7 +38,10 @@ def chord_server():
     log_message(col(f"[Chord] RPC server listening on {HOST}:{SERVER_PORT}", "cyan"))
     while True:
         conn, addr = s.accept()
-        threading.Thread(target=handle_chord_request, args=(conn, addr), daemon=True).start()
+        threading.Thread(
+            target=handle_chord_request, args=(conn, addr), daemon=True
+        ).start()
+
 
 def handle_chord_request(conn, addr):
     try:
@@ -42,6 +49,7 @@ def handle_chord_request(conn, addr):
         if data:
             request = json.loads(data.decode())
             from .ring import chord_handler
+
             response = chord_handler(request)
             conn.sendall(json.dumps(response).encode())
     except Exception as e:
@@ -49,7 +57,8 @@ def handle_chord_request(conn, addr):
     finally:
         conn.close()
 
-# region Client server 
+
+# region Client server
 def client_server():
     client_port = CLIENT_PORT
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -58,22 +67,26 @@ def client_server():
     log_message(col(f"[Client] Server listening on {HOST}:{client_port}", "cyan"))
     while True:
         conn, addr = s.accept()
-        threading.Thread(target=handle_client_request, args=(conn, addr), daemon=True).start()
+        threading.Thread(
+            target=handle_client_request, args=(conn, addr), daemon=True
+        ).start()
 
-#region handle_client_request
+
+# region handle_client_request
 def handle_client_request(conn, addr):
     try:
         handle_client(conn, addr)
     except Exception as e:
         log_message(col(f"[Client] Error al procesar petición de {addr}: {e}", "red"))
 
-#region multicast_listener
+
+# region multicast_listener
 def multicast_listener():
     """
     Función que se encarga de escuchar peticiones multicast.
     Cuando recibe el mensaje DISCOVER_SERVER, responde con su dirección IP.
     """
-    MCAST_GRP = '224.0.0.1'
+    MCAST_GRP = "224.0.0.1"
     MCAST_PORT = 10003
     DISCOVER_MSG = "DISCOVER_SERVER"
     BUFFER_SIZE = 1024
@@ -81,35 +94,37 @@ def multicast_listener():
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
     # Permitir que varias instancias puedan reutilizar el puerto
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    
+
     # Vincular el socket a todas las interfaces en el puerto MCAST_PORT
-    sock.bind(('', MCAST_PORT))
-    
+    sock.bind(("", MCAST_PORT))
+
     # Unirse al grupo multicast
     mreq = struct.pack("=4sl", socket.inet_aton(MCAST_GRP), socket.INADDR_ANY)
     sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
-    
-    log_message(col(f"[Muticast] Escuchando mensajes en {MCAST_GRP}:{MCAST_PORT}",'magenta'))
-    
+
+    log_message(
+        col(f"[Muticast] Escuchando mensajes en {MCAST_GRP}:{MCAST_PORT}", "magenta")
+    )
+
     while True:
         try:
             data, addr = sock.recvfrom(BUFFER_SIZE)
             message = data.decode().strip()
             print(f"Recibido mensaje: '{message}' desde {addr}")
-            if message.startswith(DISCOVER_MSG+':'):
+            if message.startswith(DISCOVER_MSG + ":"):
                 local_ip = gs.local_ip
-                _,rec_ip,rec_port=message.split(':')
+                _, rec_ip, rec_port = message.split(":")
                 print(f"{rec_ip} {rec_port}")
-                sock.sendto(local_ip.encode(), (rec_ip,int(rec_port)))
+                sock.sendto(local_ip.encode(), (rec_ip, int(rec_port)))
             else:
                 local_ip = gs.local_ip
                 sock.sendto(local_ip.encode(), addr)
         except Exception as e:
             print(f"Error en el listener: {e}")
-            time.sleep(1) 
+            time.sleep(1)
 
 
-#region discover_servers
+# region discover_servers
 def discover_servers(timeout=1):
     """
     Envía una petición multicast para descubrir servidores y espera respuestas.
@@ -117,7 +132,7 @@ def discover_servers(timeout=1):
     :param timeout: Tiempo máximo (en segundos) para esperar respuestas.
     :return: Lista con las IPs de los servidores descubiertos.
     """
-    MCAST_GRP = '224.0.0.1'
+    MCAST_GRP = "224.0.0.1"
     MCAST_PORT = 10003
     MESSAGE = "DISCOVER_SERVER"
     BUFFER_SIZE = 1024
@@ -127,7 +142,7 @@ def discover_servers(timeout=1):
     sock.settimeout(timeout)
 
     # Configurar TTL del paquete multicast
-    ttl = struct.pack('b', 1)
+    ttl = struct.pack("b", 1)
     sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, ttl)
 
     # Enviar la petición multicast
@@ -144,7 +159,7 @@ def discover_servers(timeout=1):
             data, addr = sock.recvfrom(BUFFER_SIZE)
             server_ip = data.decode().strip()
             servers.append(server_ip)
-            log_message(col(f"Servidor descubierto: {server_ip}",'green'))
+            log_message(col(f"Servidor descubierto: {server_ip}", "green"))
         except socket.timeout:
             break
         except Exception as e:
@@ -157,26 +172,31 @@ def discover_servers(timeout=1):
     return servers
 
 
-
-#region main
+# region main
 def main():
-    print("________________________________________________________________________________")
+    print(
+        "________________________________________________________________________________"
+    )
     initialize_global_state()
     init_db()
 
-    from .ring import join, start_chord_maintenance,ring_init
+    from .ring import join, start_chord_maintenance, ring_init
+
     ring_init()
     try:
         ip = discover_servers()[0]
         port = SERVER_PORT
         existing_node = {"id": None, "ip": ip, "port": port}
         join(existing_node)
-        log_message(col(f"[Chord] Nodo unido al anillo a través de {ip}:{port}", "green"))
+        log_message(
+            col(f"[Chord] Nodo unido al anillo a través de {ip}:{port}", "green")
+        )
     except Exception as e:
-        log_message(col("[Chord] Iniciado anillo nuevo. Este es el primer nodo:{e}", "green"))
+        log_message(
+            col("[Chord] Iniciado anillo nuevo. Este es el primer nodo:{e}", "green")
+        )
 
     start_chord_maintenance()
-    
 
     threading.Thread(target=multicast_listener, daemon=True).start()
     threading.Thread(target=chord_server, daemon=True).start()
@@ -187,8 +207,9 @@ def main():
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        log_message(col("Gestor finalizado por teclado.",'red'))
+        log_message(col("Gestor finalizado por teclado.", "red"))
         sys.exit(0)
+
 
 if __name__ == "__main__":
     main()
