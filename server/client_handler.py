@@ -200,7 +200,6 @@ def process_get_user(message):
     """
     username = message.get("target_username")
 
-    print("usernameeeeeeeeee :", username)
     if not username:
         return {"status": "error", "message": "Username no proporcionado."}
     try:
@@ -231,7 +230,6 @@ def process_get_user(message):
             "last_update": row[3],
         }
         log_message(f"Información consultada para el usuario '{username}'.")
-        print("user info ", user_info)
         return user_info
     except Exception as e:
         log_message(f"Error en get_user: {e}")

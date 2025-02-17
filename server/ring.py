@@ -188,8 +188,8 @@ def is_alive(node):
 def find_successor_hard(id_val, event=-1):
     list = nodes_connected_list(rint())
 
-    for i in list:
-        VERBOSE and print(colored(i, "blue"))
+    # for i in list:
+    #     VERBOSE and print(colored(i, "blue"))
 
     list.sort(key=lambda x: x["id"])
 
@@ -246,8 +246,8 @@ def find_successor(id_val, event=-1, hard_mode=0):
 # region find_predecessor_hard
 def find_predecessor_hard(id_val, event=-1):
     list = nodes_connected_list(rint())
-    for i in list:
-        VERBOSE and print(colored(i, "magenta"))
+    # for i in list:
+    #     VERBOSE and print(colored(i, "magenta"))
 
     list.sort(key=lambda x: x["id"])
     list.reverse()
@@ -633,7 +633,7 @@ def chord_handler(request: dict) -> dict:
     if action == "to_predecessor":
         ret = to_predecessor()
         VERBOSE and print(
-            colored(f"TRANSFERING TO THE PREDECESSOR:\n {ret}", "magenta")
+            colored(f"TRANSFERING TO THE PREDECESSOR", "magenta")
         )
         return ret
     if action == "hotfix_replicate":
