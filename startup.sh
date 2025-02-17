@@ -1,12 +1,11 @@
 #!/bin/bash
 
-# Solicita al usuario que ingrese una opción.
 read -p "Presiona Enter para solo copiar archivos y reiniciar contenedores, o escribe 'build' para un build completo: " choice
 
 if [ -z "$choice" ]; then
     echo "Reiniciando completamente los contenedores..."
-    docker stop client1 client2 client3 server1 server2 server3 router
-    docker rm client1 client2 client3 server1 server2 server3 router
+    docker stop client1 client2 client3 server1 server2 server3 server4 server5 router
+    docker rm client1 client2 client3 server1 server2 server3 server4 server5 router
 
     echo "Levantando contenedores..."
     docker-compose up -d
@@ -15,6 +14,7 @@ if [ -z "$choice" ]; then
     docker cp ./client client1:/app
     docker cp ./client client2:/app
     docker cp ./client client3:/app
+    docker cp ./router router:/app
     docker cp ./server server1:/app
     docker cp ./server server2:/app
     docker cp ./server server3:/app
@@ -23,11 +23,12 @@ if [ -z "$choice" ]; then
 
     echo "Contenedores actualizados y reiniciados correctamente."
     exit 0
+fi
 
-elif [ "$choice" == "build" ]; then
+if [ "$choice" == "build" ]; then
     echo "Realizando build completo..."
-    docker stop client1 client2 client3 server1 server2 server3 router
-    docker rm client1 client2 client3 server1 server2 server3 router
+    docker stop client1 client2 client3 server1 server2 server3 server4 server5 router
+    docker rm client1 client2 client3 server1 server2 server3 server4 server5 router
 
     docker build -t router-image -f Dockerfile.router .
     if [ $? -ne 0 ]; then
@@ -57,10 +58,9 @@ elif [ "$choice" == "build" ]; then
     read -n 1 -s -r -p "Presiona cualquier tecla para continuar..."
     echo
     exit 0
-
-else
-    echo "Opción inválida. Por favor, inténtalo nuevamente."
-    read -n 1 -s -r -p "Presiona cualquier tecla para continuar..."
-    echo
-    exit 1
 fi
+
+echo "Opción inválida. Por favor, inténtalo nuevamente."
+read -n 1 -s -r -p "Presiona cualquier tecla para continuar..."
+echo
+exit 1
