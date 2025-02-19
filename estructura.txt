@@ -1,0 +1,43 @@
+.
+├── client
+│   ├── client.py
+│   ├── __pycache__
+│   │   └── client.cpython-38.pyc
+│   ├── requirements.txt
+│   └── startup.sh
+├── Distributed System Design.md
+├── Distributed System Design.pdf
+├── docker-compose.yml
+├── Dockerfile.client
+├── Dockerfile.router
+├── Dockerfile.server
+├── estructura.txt
+├── README.md
+├── router
+│   ├── multicast_proxy.py
+│   └── router_init.sh
+├── server
+│   ├── client_handler.py
+│   ├── config.py
+│   ├── db.py
+│   ├── db.server
+│   ├── gestor.log
+│   ├── global_state.py
+│   ├── __init__.py
+│   ├── logging.py
+│   ├── main.py
+│   ├── requirements.txt
+│   ├── ring.py
+│   └── startup.sh
+├── startup.bat
+├── startup.sh
+├── streamlit_app
+│   ├── app.py
+│   └── requirements.txt
+├── visualizer
+│   ├── app.py
+│   └── templates
+│       └── index.html
+└── whatsapp.pdf
+
+7 directories, 33 files

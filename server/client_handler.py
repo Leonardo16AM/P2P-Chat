@@ -76,6 +76,8 @@ def cleanup_users() -> None:
                 conn.commit()
 
                 users_dict_list = [dict(user) for user in users_to_update]
+                for user in users_dict_list:
+                    user['status']='disconnected'
                 log_message(
                     f"\t{updated} usuarios actualizados a estado 'disconnected' por inactividad."
                 )

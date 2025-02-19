@@ -12,6 +12,7 @@ from termcolor import colored as col
 import sqlite3
 import sys
 import struct
+import queue
 
 SERVER_UP = True
 BROADCAST_PORT = 55555
@@ -296,6 +297,65 @@ def send_alive_signal(username: str, public_key_str: str, stop_event: threading.
 
     logging.info("Hilo send_alive_signal finalizado.")
 
+def send_alive_signal_streamlit(username: str, public_key_str: str, stop_event: threading.Event):
+    """
+    Continuously sends an "alive" signal to the designated manager host to indicate that the client is active.
+    The function attempts to connect to the manager server and sends a JSON message with the username and public key.
+    Depending on the response received, it may update the SERVER_UP flag, transfer local data to a new client, or trigger a logout.
+    """
+    global GESTOR_HOST
+    global SERVER_UP
+
+    while not stop_event.is_set():
+        global loguedout
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(1)
+                s.connect((GESTOR_HOST, GESTOR_PORT))
+                message = {
+                    "action": "alive_signal",
+                    "username": username,
+                    "public_key": public_key_str,
+                }
+                s.sendall(json.dumps(message).encode())
+                response = s.recv(4096)
+                response = json.loads(response.decode())
+
+                if response.get("status") == "success":
+                    SERVER_UP = True
+                elif response.get("status") == "disconnect":
+                    new_ip = response.get("new_ip")
+                    print(
+                        col(
+                            "Otro cliente se ha conectado. Transfiriendo datos al nuevo cliente...",
+                            "red",
+                        )
+                    )
+                    transfer_local_data(new_ip, CLIENT_PORT)
+                    print(col("Cerrando sesión...", "red"))
+                    print("Presione enter para continuar...")
+                    loguedout = True
+                    logout()
+                    return
+                else:
+                    SERVER_UP = False
+        except socket.timeout:
+            SERVER_UP = False
+        except Exception as e:
+            SERVER_UP = False
+            gestor_ip = False
+            try:
+                gestor_ip = discover_servers()[0]
+            except Exception as e:
+                pass
+            if gestor_ip:
+                GESTOR_HOST = gestor_ip
+                SERVER_UP = True
+
+        if stop_event.wait(timeout=ALIVE_INTERVAL):
+            break
+
+
 
 def transfer_local_data(
     new_ip: str, port: int, retries: int = 3, delay: int = 2
@@ -502,6 +562,14 @@ def show_chats() -> None:
     if not chats:
         print(col("No tienes chats activos.", "yellow"))
         return
+    
+def show_chats_streamlit() -> None:
+    """Shows a list of active chats."""
+    chats = list_chats()
+    if not chats:
+        print(col("No tienes chats activos.", "yellow"))
+        return
+    return chats
 
     print(col("Chats activos:", "blue"))
     for chat in chats:
@@ -556,6 +624,18 @@ def open_chat() -> None:
             print(f"[{timestamp}] {col(sender, 'cyan')}: {message}")
     except ValueError:
         print(col("ID del chat no válido.", "red"))
+
+def open_chat_streamlit(chat_id: int) -> None:
+    """Allows the user to open a chat and view messages using the provided chat_id."""
+    try:
+        messages = get_chat_messages(chat_id)
+        if not messages:
+            print(col("No hay mensajes en este chat.", "yellow"))
+            return
+
+        return messages
+    except Exception as e:
+        print(col(f"Error al mostrar el chat: {str(e)}", "red"))
 
 
 # region send_message
@@ -628,6 +708,56 @@ def send_message(username: str) -> None:
     store_pending_message(username, target_username, message_content)
 
 
+def send_message_streamlit(username: str, target_username: str, message_content: str) -> str:
+    """Sends a message to another user using provided parameters (adaptado para Streamlit)."""
+    chat_id = get_or_create_chat(target_username)
+
+    log_text = ""
+
+    if is_server_active(GESTOR_HOST, GESTOR_PORT):
+        response = query_user_info(username, target_username)
+        if response.get("status") == "success":
+            target_ip = response.get("ip")
+            update_cached_ip(target_username, target_ip)
+            try:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
+                    client_socket.settimeout(2)
+                    client_socket.connect((target_ip, CLIENT_PORT))
+                    message = {
+                        "sender": username,
+                        "content": message_content,
+                    }
+                    client_socket.sendall(json.dumps(message).encode())
+                    log_text = f"Mensaje entregado a {target_username}: {message_content}"
+                    print(col(log_text), "green")
+                    save_message(chat_id, username, message_content, delivered=True)
+                    return log_text
+            except Exception as e:
+                log_text = f"Error al enviar el mensaje. Guardando como pendiente: {str(e)}"
+                print(col(log_text, "yellow"))
+                store_pending_message(username, target_username, message_content)
+                return log_text
+    else:
+        log_text = "No se encontró al gestor en la red.\n"
+        print(col(log_text, "yellow"))
+        cached_ip = get_cached_ip(target_username)
+        if cached_ip:
+            sub_log_text = f"Intentando con la IP cacheada para {target_username}: {cached_ip}"
+            log_text += sub_log_text + '\n'
+            print(col(sub_log_text, "blue"))
+            success = send_message_to_ip(cached_ip, username, target_username, message_content)
+            if success:
+                log_text += f"Mensaje entregado a {target_username}: {message_content}"
+                save_message(chat_id, username, message_content, delivered=True)
+                return log_text
+    sub_log_text = f"El usuario {target_username} está desconectado o no está registrado."
+    print(col(sub_log_text, "yellow"))
+    log_text += sub_log_text + f"\nMensaje pendiente almacenado para {target_username}."
+    store_pending_message(username, target_username, message_content)
+    
+    return log_text
+
+
 # region start_message_listener
 listener_thread = None
 
@@ -685,6 +815,75 @@ def start_message_listener(username: str) -> None:
 
     listener_thread = threading.Thread(target=listen, daemon=True)
     listener_thread.start()
+
+# Global queue to store received message strings
+message_queue = queue.Queue()
+
+def start_message_listener_streamlit(username: str) -> None:
+    """Starts a server to receive messages from other users.
+    Messages are stored in the global 'message_queue', which can be accessed from app.py
+    to notify the user when one or more new messages arrive.
+    """
+    global listener_thread
+
+    def listen():
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
+            server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            server_socket.bind(("", CLIENT_PORT))
+            server_socket.listen(5)
+            server_socket.settimeout(1)
+            print(
+                col(
+                    f"[{username}] Escuchando mensajes en el puerto {CLIENT_PORT}...",
+                    "green",
+                )
+            )
+
+            while not stop_event.is_set():
+                try:
+                    conn, addr = server_socket.accept()
+                    with conn:
+                        message_data = conn.recv(BUFFER_SIZE).decode()
+                        message_json = json.loads(message_data)
+
+                        if message_json.get("action") == "who_is_connected":
+                            conn.sendall(json.dumps({"username": username}).encode())
+                            continue
+                        elif message_json.get("action") == "transfer_data":
+                            merge_local_data(message_json)
+                            continue
+
+                        sender = message_json.get("sender")
+                        content = message_json.get("content")
+                        if not sender or not content:
+                            continue
+
+                        msg_str = f"Nuevo mensaje de {sender}: {content}"
+                        print(col(msg_str, "cyan"))
+                        update_cached_ip(sender, addr[0])
+                        chat_id = get_or_create_chat(sender)
+                        save_message(chat_id, sender, content, delivered=True)
+                        message_queue.put(msg_str)
+                except socket.timeout:
+                    continue
+                except Exception as e:
+                    print(col(f"Error al procesar mensaje: {str(e)}", "red"))
+
+            logging.info("Hilo message_listener finalizado.")
+
+    if listener_thread and listener_thread.is_alive():
+        logging.info(col("Listener ya está corriendo.", "yellow"))
+    else:
+        listener_thread = threading.Thread(target=listen, daemon=True)
+        listener_thread.start()
+
+def get_latest_message() -> str:
+    """Attempts to retrieve the most recent received message.
+    If there are no messages in the queue, returns an empty string."""
+    try:
+        return message_queue.get(timeout=0.1)
+    except queue.Empty:
+        return ""
 
 
 def merge_local_data(data: dict) -> None:

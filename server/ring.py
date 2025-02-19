@@ -25,6 +25,7 @@ predecessor = None
 successor = None
 current = None
 connected = 0
+just_connected=False
 M = 32
 events = set()
 update_ring_lock = False
@@ -750,7 +751,7 @@ def join(existing_node: dict) -> None:
         - Calls `full_replicate` to replicate data.
         - Calls `print_ft` to print the finger table.
     """
-    global successor, predecessor, update_ring_lock
+    global successor, predecessor, update_ring_lock, connected, just_connected
     update_ring_lock = True
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -789,7 +790,7 @@ def join(existing_node: dict) -> None:
                     conn = sqlite3.connect(DB_FILE)
                     cursor = conn.cursor()
                     VERBOSE and print(
-                        colored(f"INSERTING VALUES FROM SUCCESSOR\n{resp}", "magenta")
+                        colored(f"INSERTING VALUES FROM SUCCESSOR\n", "magenta")
                     )
                     for value in resp:
                         if "node_id" not in value:
@@ -825,7 +826,9 @@ def join(existing_node: dict) -> None:
                             )
                     conn.commit()
                     conn.close()
-                full_replicate()
+
+                just_connected=True
+                VERBOSE and print_ft
                 VERBOSE and print_db()
         except Exception as e:
             log_message(
@@ -844,9 +847,30 @@ def join(existing_node: dict) -> None:
     update_ring_lock = False
     print_ft()
 
-
+#region stabilize
 def stabilize():
-    pass
+    global just_connected
+    if just_connected:
+        hotfix_replicate(NUM_OF_REPLICAS+1,rint())
+        just_connected=False
+    
+    with gs.db_lock:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        cursor.execute('SELECT username FROM users')
+        username_list = [row[0] for row in cursor.fetchall()]
+        if not username_list:
+            conn.commit()
+            conn.close()
+            return
+        
+        cursor.execute(
+            'DELETE FROM backups WHERE username IN (' + 
+            ', '.join(f"'{username}'" for username in username_list) +
+            ')'
+        )
+        conn.commit()
+        conn.close()
 
 #region node_info
 def node_info():
@@ -1035,17 +1059,19 @@ def chord_handler(request: dict) -> dict:
         VERBOSE and print(colored(f"TRANSFERING TO THE PREDECESSOR", "magenta"))
         return ret
     if action == "hotfix_replicate":
-        i = request.get("i")
+        i = request.get("i")        
+        event = request.get("event")
         VERBOSE and print(colored(f"HOT FIX REPLICATION: {i}", "magenta"))
-        hotfix_replicate(i)
+        hotfix_replicate(i,event)
         return {}
 
     if action == "replicate":
         num = request.get("num")
+        event = request.get("event")
         data_list = request.get("data_list")
         update_values(data_list)
         if num > 1:
-            replicate(data_list, num - 1)
+            replicate(data_list,event, num - 1)
         VERBOSE and print_db()
         return {}
     
@@ -1125,7 +1151,7 @@ def run_fix_fingers() -> None:
 
 
 # region hotfix_replicate
-def hotfix_replicate(i: int) -> None:
+def hotfix_replicate(i: int, event :int =rint()) -> None:
     """
     Perform a full replication and notify the predecessor node to replicate if needed.
 
@@ -1144,10 +1170,15 @@ def hotfix_replicate(i: int) -> None:
     Note:
         The function logs an error message if it fails to notify the predecessor node.
     """
+    if event != -1 and event in events:
+        return {}
+    events.add(event)
+    
     full_replicate()
-    if i == 1:
+    if i < 1:
         return
     try:
+        VERBOSE and print(colored(f"HOTFIXING REPLICATION {i}",'magenta'))
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.settimeout(TIMEOUT)
             s.connect((predecessor["ip"], predecessor["port"]))
@@ -1328,7 +1359,7 @@ def inherit_predecessor() -> None:
             )
         conn.commit()
         conn.close()
-    replicate(data_dict, NUM_OF_REPLICAS)
+    replicate(data_dict, rint())
 
 
 # region update_values
@@ -1421,7 +1452,7 @@ def full_replicate() -> None:
     the VERBOSE flag is set to True.
     VERBOSE and print(colored("DOING A FULL REPLICATION", "magenta"))
     """
-
+    VERBOSE and print(colored("DOING A FULL REPLICATION",'magenta'))
     with gs.db_lock:
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
@@ -1446,11 +1477,11 @@ def full_replicate() -> None:
                 "status": data[5],
             }
         )
-    replicate(data_list)
+    replicate(data_list,rint())
 
 
 # region replicate
-def replicate(data_list: list, num: int = NUM_OF_REPLICAS) -> None:
+def replicate(data_list: list, event:int = rint(), num: int = NUM_OF_REPLICAS) -> None:
     """
     Replicates the given data to the successor node in a distributed system.
 
@@ -1466,9 +1497,12 @@ def replicate(data_list: list, num: int = NUM_OF_REPLICAS) -> None:
     - The function ensures that the "node_id" key is present in each data dictionary. If not, it assigns the current node's ID to it.
     - The function attempts to connect to the successor node and send the replication request. If an error occurs during this process, it logs an error message.
     """
-    if connected <= 1 or not len(data_list) or num <= 0:
+    # if event != -1 and event in events:
+    #     return 
+    # events.add(event)
+    
+    if successor['id']==current['id'] or not len(data_list) or num <= 0:
         return
-    num = min(num, connected - 1)
     # VERBOSE and print(colored(data_list, "red"))
     VERBOSE and print(f"REPLICATING {num}")
     if len(data_list) == 1:
@@ -1478,7 +1512,7 @@ def replicate(data_list: list, num: int = NUM_OF_REPLICAS) -> None:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 s.settimeout(TIMEOUT)
                 s.connect((successor["ip"], successor["port"]))
-                msg = {"action": "replicate", "num": num, "data_list": data_list}
+                msg = {"action": "replicate","event":event, "num": num, "data_list": data_list}
                 s.sendall(json.dumps(msg).encode())
                 resp = s.recv(4096)
         except Exception as e:
@@ -1491,7 +1525,7 @@ def replicate(data_list: list, num: int = NUM_OF_REPLICAS) -> None:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 s.settimeout(TIMEOUT)
                 s.connect((successor["ip"], successor["port"]))
-                msg = {"action": "replicate", "num": num, "data_list": data_list}
+                msg = {"action": "replicate","event":event, "num": num, "data_list": data_list}
                 s.sendall(json.dumps(msg).encode())
                 resp = s.recv(4096)
         except Exception as e:
