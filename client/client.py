@@ -31,6 +31,7 @@ PUBLIC_KEY_FILE = "public_key.pem"
 
 stop_event = threading.Event()
 loguedout = False
+another_session_start = False
 
 logging.basicConfig(
     filename="client.log",
@@ -230,7 +231,7 @@ def stop_all_threads() -> None:
 
 
 # region alive
-def send_alive_signal(username: str, public_key_str: str, stop_event: threading.Event):
+def send_alive_signal(username: str, public_key_str: str, stop_event: threading.Event) -> None:
     """
     Continuously sends an "alive" signal to the designated manager host to indicate that the client is active.
     The function attempts to connect to the manager server and sends a JSON message with the username and public key.
@@ -297,7 +298,7 @@ def send_alive_signal(username: str, public_key_str: str, stop_event: threading.
 
     logging.info("Hilo send_alive_signal finalizado.")
 
-def send_alive_signal_streamlit(username: str, public_key_str: str, stop_event: threading.Event):
+def send_alive_signal_streamlit(username: str, public_key_str: str, stop_event: threading.Event) -> None:
     """
     Continuously sends an "alive" signal to the designated manager host to indicate that the client is active.
     The function attempts to connect to the manager server and sends a JSON message with the username and public key.
@@ -307,7 +308,9 @@ def send_alive_signal_streamlit(username: str, public_key_str: str, stop_event: 
     global SERVER_UP
 
     while not stop_event.is_set():
+        global another_session_start
         global loguedout
+        another_session_start = False
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 s.settimeout(1)
@@ -335,6 +338,7 @@ def send_alive_signal_streamlit(username: str, public_key_str: str, stop_event: 
                     print(col("Cerrando sesión...", "red"))
                     print("Presione enter para continuar...")
                     loguedout = True
+                    another_session_start = True
                     logout()
                     return
                 else:

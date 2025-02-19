@@ -1,41 +1,38 @@
 import streamlit as st
-import time
-import json
-import sys
-import os
 import threading
-from getpass import getpass
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from cryptography.hazmat.primitives import serialization
 from termcolor import colored as col
 import datetime
 
-
-# Importar funciones adaptadas del módulo client.
-# Se asume que en client.py se han definido las versiones adaptadas (para Streamlit) de:
-# register, login, send_message_streamlit, query_user_info, show_chats, open_chat_streamlit,
-# load_or_generate_keys, start_message_listener, start_pending_message_worker, etc.
 from client.client import (
-    register,
-    login,
-    send_message_streamlit,
-    query_user_info,
-    show_chats_streamlit,
-    open_chat_streamlit,  # Idealmente, se modifica para que retorne los mensajes de un chat en vez de usar input()
-    load_or_generate_keys,
-    logout,
     start_message_listener_streamlit, 
     start_pending_message_worker, 
     send_alive_signal_streamlit,
-    loguedout,
-    stop_event,
-    GESTOR_HOST,
+    send_message_streamlit,
+    load_or_generate_keys,
+    show_chats_streamlit,
+    open_chat_streamlit,  
     connect_to_server,
-    discover_servers,
     is_server_active,
-    GESTOR_PORT,
-
+    discover_servers,
+    query_user_info,
+    register,
+    logout,
+    login,
+    another_session_start,
+    stop_event,
+    loguedout,
+    GESTOR_HOST,
+    GESTOR_PORT
 )
+
+if another_session_start:
+    another_session_start = False
+    st.session_state.logged_in = False
+    st.session_state.username = ""
+    st.session_state.chat_history = []
+    st.success("Logged out successfully! Data transfered to the new session.")
 
 def update_chat_history(sender, recipient, message):
                     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -55,11 +52,13 @@ if "public_key_str" not in st.session_state:
         format=PublicFormat.SubjectPublicKeyInfo,
     ).decode('utf-8')
 if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []  # Para mostrar el historial local (esto se podría actualizar dinámicamente)
+    st.session_state.chat_history = []  
 
 # Definir el menú de navegación en la barra lateral
-menu = st.sidebar.radio("Navigation", ["Login/Register", "Chat", "View Chats", "Open Chat", "Find User", "Project Report"])
+menu = st.sidebar.radio("Navigation", ["Login/Register", "Chat", "View Chats", "Open Chat", "Find User", "Project README"])
 
+if st.session_state.logged_in:
+    st.sidebar.markdown(f"**Logged in as:** {st.session_state.username}")
 
 threading.Thread(target=connect_to_server, daemon=True).start()
 
@@ -98,6 +97,8 @@ if menu == "Login/Register":
                 st.session_state.logged_in = True
                 st.session_state.username = username
                 st.success("Login successful!")
+
+                another_session_start = False
                 
                 # Iniciar los servicios en segundo plano sin bloquear la interfaz
                 stop_event.clear()
@@ -111,8 +112,8 @@ if menu == "Login/Register":
                 alive_thread.start()
 
                 st.info(
-                    "Servicios en segundo plano iniciados: escucha de mensajes, verificación de mensajes pendientes y envío de señal de vida. "
-                    "Utiliza la barra lateral para navegar y cerrar sesión."
+                    "Background services started: message listening, pending message verification, and alive signal sending. "
+                    "Use the sidebar to navigate and logout."
                 )
             else:
                 st.error(response.get("message"))
@@ -144,7 +145,6 @@ elif menu == "Chat":
                 log_text = send_message_streamlit(st.session_state.username, target, message_content)
                 print("log_text: ",log_text)
                 st.success(log_text)
-                # Aquí se podría actualizar el historial de chat (llamar a una función que recupere el historial)
 
                 update_chat_history(st.session_state.username, target, message_content)
             else:
@@ -220,9 +220,8 @@ elif menu == "Project Report":
 
 # Opción para cerrar sesión (por ejemplo, un botón en la barra lateral)
 if st.sidebar.button("Logout"):
+    logout()
     st.session_state.logged_in = False
     st.session_state.username = ""
     st.session_state.chat_history = []
-    logout()
     st.success("Logged out successfully!")
-
