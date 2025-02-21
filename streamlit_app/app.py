@@ -88,7 +88,7 @@ col1, col2 = st.columns([1, 4])
 if menu == "Login/Register":
 
     with col1:
-        st.image("wp2p.jpeg", width=100)
+        st.image("wp2p.png", width=100)
 
     with col2:
         st.title("WhatsApp P2P - Login / Register")
@@ -143,7 +143,7 @@ if menu == "Login/Register":
 elif menu == "Chat":
 
     with col1:
-        st.image("wp2p.jpeg", width=100)
+        st.image("wp2p.png", width=100)
 
     with col2:
         st.title("WhatsApp P2P - Chat")
@@ -168,7 +168,7 @@ elif menu == "Chat":
 elif menu == "View Chats":
 
     with col1:
-        st.image("wp2p.jpeg", width=100)
+        st.image("wp2p.png", width=100)
 
     with col2:
         st.title("WhatsApp P2P - View Chats")
@@ -188,7 +188,7 @@ elif menu == "View Chats":
 # Página para abrir un chat específico
 elif menu == "Open Chat":
     with col1:
-        st.image("wp2p.jpeg", width=100)
+        st.image("wp2p.png", width=100)
 
     with col2:    
         st.title("WhatsApp P2P - Open Chat")
@@ -217,7 +217,7 @@ elif menu == "Open Chat":
 # Página para buscar un usuario
 elif menu == "Find User":
     with col1:
-        st.image("wp2p.jpeg", width=100)
+        st.image("wp2p.png", width=100)
 
     with col2:
         st.title("WhatsApp P2P - Find User")
@@ -241,10 +241,20 @@ elif menu == "Find User":
 elif menu == "Project README":
     try:
         st.markdown("# WhatsApp P2P Project README")
-        st.image("wp2p.jpeg", width=400)
+        st.image("wp2p.png", width=400)
         with open("streamlit_report.md", "r", encoding="utf-8") as f:
             report_md = f.read()
         st.markdown(report_md, unsafe_allow_html=True)
+        st.image("streamlit.png")
+        with open("streamlit_report2.md", "r", encoding="utf-8") as f:
+            report_md2 = f.read()
+        st.markdown(report_md2, unsafe_allow_html=True)
+        st.image("image.png")
+        with open("streamlit_report3.md", "r", encoding="utf-8") as f:
+            report_md3 = f.read()
+        st.markdown(report_md2, unsafe_allow_html=True)
+
+
     except Exception as e:
         st.error("Could not load the project report.")
 

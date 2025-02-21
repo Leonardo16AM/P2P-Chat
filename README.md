@@ -1,5 +1,7 @@
 # Distributed-Systems-Project: **P2P-Chat**
 
+<img src="wp2p.png" alt="wp2p" width="400" height="400">
+
 **P2P-Chat** is a decentralized messaging platform that allows users to communicate directly without relying on central servers. It ensures privacy, security, and efficient message delivery using a peer-to-peer (P2P) architecture. The system integrates **local caching**, **SQLite databases** for user-specific storage, and **Docker-based networking** to simulate real distributed environments.
 
 By implementing a **CHORD ring architecture**, P2P-Chat enables efficient data lookup, replication to K successors, and fault tolerance. If a node fails, its data remains accessible through replicated backups. **Multicast discovery** allows dynamic identification of servers within the network.
@@ -48,6 +50,9 @@ Developed in **Python** and containerized using **Docker**, the platform uses **
      streamlit run app.py
      ```  
    - A simple interface for managing chats, sending messages, and viewing history.
+  
+![Client Graphic Interface](streamlit.png)
+
 
 ---
 

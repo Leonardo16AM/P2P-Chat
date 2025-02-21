@@ -18,7 +18,11 @@ COPY ./client/requirements.txt /app/client_requirements.txt
 RUN pip install --no-cache-dir -r /app/client_requirements.txt
 
 COPY ./streamlit_app/streamlit_report.md /app/streamlit_report.md
-COPY wp2p.jpeg /app/wp2p.jpeg
+COPY ./streamlit_app/streamlit_report2.md /app/streamlit_report2.md
+COPY ./streamlit_app/streamlit_report3.md /app/streamlit_report3.md
+COPY wp2p.png /app/wp2p.png
+COPY image.png /app/image.png
+COPY streamlit.png /app/streamlit.png
 
 # Instalar dependencias de la interfaz Streamlit
 COPY ./streamlit_app/requirements.txt /app/requirements.txt
