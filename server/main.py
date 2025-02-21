@@ -40,6 +40,7 @@ def chord_server() -> None:
     Starts a Chord RPC server that listens for incoming connections to handle chord requests.
     """
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     s.bind((HOST, SERVER_PORT))
     s.listen(5)
     log_message(col(f"[Chord] RPC server listening on {HOST}:{SERVER_PORT}", "cyan"))
@@ -75,6 +76,7 @@ def client_server() -> None:
     """
     client_port = CLIENT_PORT
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     s.bind((HOST, client_port))
     s.listen(5)
     log_message(col(f"[Client] Server listening on {HOST}:{client_port}", "cyan"))
