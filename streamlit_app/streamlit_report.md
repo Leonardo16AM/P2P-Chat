@@ -1,8 +1,3 @@
-# Distributed-Systems-Project. **WhatsApp P2P**
-
-<img src="wp2p.jpeg" alt="imagen" width="400" height="400">
-
-
 ## Overview
 
 This project is a decentralized Peer-to-Peer (P2P) messaging application inspired by the functionalities of modern chat systems like WhatsApp. The application enables users to communicate securely and efficiently without relying on a centralized server to store messages. Instead, the architecture leverages local caching, SQLite databases for user-specific storage, and Docker-based networking to simulate real-world distributed systems.
@@ -148,48 +143,3 @@ The project is built in Python and employs Docker for containerization, with mul
 ### Prerequisites
 
 - Docker
-
-### Repo structure
-
-.
-├── client
-│   ├── client.py
-│   ├── __pycache__
-│   │   └── client.cpython-38.pyc
-│   ├── requirements.txt
-│   └── startup.sh
-├── Distributed System Design.md
-├── Distributed System Design.pdf
-├── docker-compose.yml
-├── Dockerfile.client
-├── Dockerfile.router
-├── Dockerfile.server
-├── README.md
-├── router
-│   ├── multicast_proxy.py
-│   └── router_init.sh
-├── server
-│   ├── client_handler.py
-│   ├── config.py
-│   ├── db.py
-│   ├── db.server
-│   ├── gestor.log
-│   ├── global_state.py
-│   ├── __init__.py
-│   ├── logging.py
-│   ├── main.py
-│   ├── requirements.txt
-│   ├── ring.py
-│   └── startup.sh
-├── startup.bat
-├── startup.sh
-├── streamlit_app
-│   ├── app.py
-│   └── requirements.txt
-├── visualizer
-│   ├── app.py
-│   └── templates
-│       └── index.html
-└── whatsapp.pdf
-
-7 directories, 33 files

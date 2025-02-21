@@ -83,9 +83,17 @@ public_key_str = public_key.public_bytes(
 if loguedout:
     loguedout = False
 
+col1, col2 = st.columns([1, 4])
 # Página de Login/Register
 if menu == "Login/Register":
-    st.title("WhatsApp P2P - Login / Register")
+
+    with col1:
+        st.image("wp2p.jpeg", width=100)
+
+    with col2:
+        st.title("WhatsApp P2P - Login / Register")
+
+
     action = st.selectbox("Select Action", ["Register", "Login"])
     
     if action == "Login":
@@ -133,7 +141,13 @@ if menu == "Login/Register":
 
 # Página para enviar mensajes (Chat)
 elif menu == "Chat":
-    st.title("WhatsApp P2P - Chat")
+
+    with col1:
+        st.image("wp2p.jpeg", width=100)
+
+    with col2:
+        st.title("WhatsApp P2P - Chat")
+
     if not st.session_state.logged_in:
         st.warning("Please log in first!")
     else:
@@ -152,7 +166,13 @@ elif menu == "Chat":
 
 # Página para ver todos los chats
 elif menu == "View Chats":
-    st.title("WhatsApp P2P - View Chats")
+
+    with col1:
+        st.image("wp2p.jpeg", width=100)
+
+    with col2:
+        st.title("WhatsApp P2P - View Chats")
+    
     if not st.session_state.logged_in:
         st.warning("Please log in first!")
     else:
@@ -167,7 +187,12 @@ elif menu == "View Chats":
 
 # Página para abrir un chat específico
 elif menu == "Open Chat":
-    st.title("WhatsApp P2P - Open Chat")
+    with col1:
+        st.image("wp2p.jpeg", width=100)
+
+    with col2:    
+        st.title("WhatsApp P2P - Open Chat")
+    
     if not st.session_state.logged_in:
         st.warning("Please log in first!")
     else:
@@ -191,7 +216,12 @@ elif menu == "Open Chat":
 
 # Página para buscar un usuario
 elif menu == "Find User":
-    st.title("WhatsApp P2P - Find User")
+    with col1:
+        st.image("wp2p.jpeg", width=100)
+
+    with col2:
+        st.title("WhatsApp P2P - Find User")
+        
     if not st.session_state.logged_in:
         st.warning("Please log in first!")
     else:
@@ -208,13 +238,13 @@ elif menu == "Find User":
                 st.markdown("The server is not active. Please try again later.")
 
 # Página del informe del proyecto
-elif menu == "Project Report":
-    st.title("Project Report")
-    st.subheader("Distributed System Design Report")
+elif menu == "Project README":
     try:
-        with open("Distributed System Design.md", "r", encoding="utf-8") as f:
+        st.markdown("# WhatsApp P2P Project README")
+        st.image("wp2p.jpeg", width=400)
+        with open("streamlit_report.md", "r", encoding="utf-8") as f:
             report_md = f.read()
-        st.markdown(report_md)
+        st.markdown(report_md, unsafe_allow_html=True)
     except Exception as e:
         st.error("Could not load the project report.")
 
