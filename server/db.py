@@ -4,6 +4,7 @@ from threading import Lock
 from datetime import datetime
 from .config import DB_FILE
 from .logging import log_message
+import server.global_state as gs
 
 db_lock = Lock()
 
@@ -45,3 +46,24 @@ def init_db() -> None:
         conn.commit()
         conn.close()
     log_message("Base de datos inicializada.")
+
+
+#region del_db
+def del_db():
+    with gs.db_lock:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        cursor.execute(
+                """
+                    DELETE FROM users
+                    WHERE 1 = 1;
+                """
+                )
+        cursor.execute(
+                """
+                    DELETE FROM backups
+                    WHERE 1 = 1;
+                """
+                )
+        conn.commit()
+        conn.close()

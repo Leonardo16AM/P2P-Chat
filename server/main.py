@@ -7,7 +7,7 @@ import os
 from typing import Tuple
 from .config import HOST, SERVER_PORT, CLIENT_PORT
 from .logging import log_message
-from .db import init_db
+from .db import init_db,del_db
 from .client_handler import handle_client, cleanup_users
 from termcolor import colored as col
 import json
@@ -221,6 +221,10 @@ def main() -> None:
     )
     initialize_global_state()
     init_db()
+    try:
+        del_db()
+    except Exception as e:
+        print(e)
 
     from .ring import join, start_chord_maintenance, ring_init
 
